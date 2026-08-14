@@ -1,0 +1,31 @@
+{
+  "name": "math-problem-bank",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "难题库 —— 以图片保存数学难题与解题思路",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "serve": "node scripts/serve.mjs",
+    "check": "node scripts/audit.mjs && node scripts/e2e.mjs"
+  },
+  "dependencies": {
+    "@types/three": "^0.185.4",
+    "motion": "^13.1.0",
+    "qrcode": "^1.5.4",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "three": "^0.185.1"
+  },
+  "devDependencies": {
+    "@types/qrcode": "^1.5.6",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.4",
+    "@vitejs/plugin-react": "^6.0.5",
+    "puppeteer-core": "^25.5.0",
+    "typescript": "^7.0.2",
+    "vite": "^8.2.1"
+  }
+}

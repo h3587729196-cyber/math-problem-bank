@@ -1,0 +1,11 @@
+node_modules
+dist
+.DS_Store
+*.local
+scripts/shots
+
+# 运行时数据与本地产物
+data/
+work/
+.serve.pid
+*.log
