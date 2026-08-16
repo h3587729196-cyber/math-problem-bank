@@ -1,6 +1,8 @@
-# 难题库 · Math Problem Bank
+# Math Problem Bank · 难题库
 
-> **本地优先（local-first）的图片化数学题库** —— 把题目与解题思路都保存为图片：一题多解、解法剧场、FSRS-Lite 间隔复习、Three.js 方法-题目知识图谱、局域网同步。所有数据存储于浏览器 IndexedDB，无后端、无上传。
+English | [中文](README.zh.md)
+
+> **A local-first, image-based math problem library.** Save hard problems and their solution walkthroughs as images, distill them into reusable **methods (招式)**, and let a spaced-repetition engine schedule your reviews — everything stays in your browser (IndexedDB), no backend, no uploads.
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![React](https://img.shields.io/badge/React-19-61dafb?logo=react)](https://react.dev)
@@ -8,99 +10,99 @@
 [![Vite](https://img.shields.io/badge/Vite-8-646cff?logo=vite)](https://vite.dev)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/h3587729196-cyber/math-problem-bank/pulls)
 
-## 为什么做这个项目
+## Why
 
-拍了 100 道难题，当场懂了，考试前全忘了。这个应用把「截图堆」变成一套 **方法 ↔ 题目知识系统**：每道题挂到它用到的方法上，每个方法反查它解决过的题目，再配合记忆曲线排期回看——让「当时怎么卡住、怎么突破」沉淀为可复用的招式。
+You photograph 100 hard problems, understand them once, then forget them all before the exam. This app turns that pile of screenshots into a **method–problem knowledge system**: every problem links to the methods it uses, and every method links back to the problems it solved — so "where I got stuck and how I broke through" becomes reusable technique.
 
-## 功能亮点
+## Features
 
-### 图片化题库
-题干图片 + **一题多解**：每组解法可独立命名、记录多条文字步骤、附一张思路图，并可标记「简易度（简单/适中/复杂）」与「妙解」；支持标题 / 来源 / 难度 / 状态 / 标签 / 解法数 / 关键字筛选与搜索，另有独立的「破题思路」搜索池。
+### Image-first problem bank
+Problem images plus **multiple solutions per problem**: each solution can be named, records text steps, and carries a diagram, with a difficulty tag (easy / medium / hard) and a "clever solution" flag. Filter and search by title, source, difficulty, status, tags, solution count and keywords, with a separate "approach notes" search pool.
 
-### 解法剧场
-从题目详情一键进入：把任一解法按步骤逐帧回放，动画与页面无缝衔接、可随时打断；支持切换解法、拖动进度、倍速播放与键盘方向键操控。
+### Solution theater
+From any problem detail, replay a solution step by step like a mini film — animations flow seamlessly with the page and can be interrupted anytime; switch solutions, scrub the timeline, 1×/1.5×/2× speed, and keyboard arrow controls.
 
-### 招式网络（Three.js 3D 知识图谱）
-方法与题库的力导向知识图谱：方法 = 蓝色发光球体（越大关联越多），题目 = 状态色小球（绿/橙/红），关联按角色（核心/辅助/延伸）以霓虹连线区分；单击高亮邻域，**双击飞入节点内部**展开步骤链 / 解法环，Esc 返回全景。
+### Technique network (3D knowledge graph)
+A force-directed graph of methods and problems rendered with three.js: methods as glowing blue nodes (larger = more links), problems as status-colored nodes (green/orange/red), edges by role (core / auxiliary / extension). Click to highlight a neighborhood, **double-click to fly inside a node** and unfold its step chain / solution ring, Esc to return to the overview.
 
-### FSRS-Lite 间隔回看 + 强制思考
-FSRS 启发的记忆模型（难度 / 稳定性 / 记忆强度，目标保持率 90%）：**单卡专注会话先强制思考 20 秒**，倒计时结束才出现「查看答案」，再按「忘了 / 有点模糊 / 做出来了」三级评分，分别塌缩、微调、倍增间隔；**连续做对 3 次自动毕业**。
+### FSRS-Lite spaced review with forced recall
+An FSRS-inspired memory model (difficulty, stability, retrievability; 90% target retention). Each session makes you **think for 20 seconds** before revealing the answer, then grades it (forgot / fuzzy / got it) — collapsing, tuning or doubling the interval accordingly; **3 correct reviews in a row graduates the card**.
 
-### 认知回看
-难度 4–5 的难题单独成池，每次回看记录「这次觉得的难度」，自动绘制**认知曲线**（难度随时间的变化）；觉得变简单则降档并拉长间隔，直到自动毕业。
+### Cognitive growth curve
+Hard problems (difficulty 4–5) form their own review pool; every session records "how hard it feels now", drawing a **cognitive curve** (perceived difficulty over time) until the problem graduates.
 
-### 方法库 & 题↔方法双向关联
-方法含适用信号、操作步骤、说明与易错点（支持图片）；显式关联带角色与备注，题目侧、方法侧双向管理；方法掌握度 5 级（了解 → 融会贯通），并按使用情况自动分类（高频 / 稳定 / 开始生疏 / 闲置…）。
+### Method library & problem↔method links
+Methods carry applicability signals, step-by-step procedures, notes and pitfalls (images supported). Explicit links carry a role and remark and are managed from both sides; mastery has 5 levels (aware → mastery) with automatic categorization by usage.
 
-### 巧思库
-所有解法中的破题步骤都可标星并设置巧妙程度（1–5），自动汇入巧思库；支持模糊搜索、按程度排序，点击任意条目即可溯源回原题。
+### Clever tricks library
+Star any breakthrough step and rate its cleverness (1–5); starred steps flow into a searchable library sortable by level, and every entry traces back to the original problem.
 
-### 数据分析报告
-专业学习报告：核心指标、状态趋势、攻克用时、薄弱点 Top、方法掌握度 / 难度 / 巧思 / 活跃度分析；可按「本月 / 近 90 天 / 全部 / 自定义」筛选并对比上一期，按 A4 排版，一键打印 / 导出 PDF。
+### Analytics report
+A professional study report: core KPIs, status trends, time-to-solve, weak spots, mastery / difficulty / cleverness / activity analysis. Filter by month / 90 days / all / custom range with period-over-period comparison; A4-styled, one-click print or PDF export.
 
-### 局域网同步
-电脑与手机连同一 WiFi 自动互通：数据存于本地服务端，新设备打开自动拉取、编辑后自动推送；备份面板支持手动「从其他设备合并 / 上传当前题库」。
+### LAN sync
+Your phone and computer on the same Wi-Fi stay in sync automatically: data lives on the local server, new devices pull on open, edits push within ~30s; the backup panel also offers manual merge/upload.
 
-### 备份与恢复
-本地自动备份（保留最近 N 份）、ZIP 完整导出 / 导入（含图片原图与页面设置）、兼容旧版 JSON 备份、一键清空。
+### Backup & restore
+Local auto-backup (keep the latest N copies), full ZIP export/import (original images + page settings), legacy JSON backup import, and one-click wipe.
 
-## 设计语言（Liquid Glass）
+## Design language (Liquid Glass)
 
-- **液态玻璃**：玻璃控件如水滴浮于页面——顶部高光点（水珠反光）、底部透光（caustic）、菲涅尔亮边（rim light）、接触阴影；SDF 位移 + `feDisplacementMap` 实现自然折射，浏览器不支持 `url()` 时自动回退纯模糊；
-- **动效**：视图切换模糊 + 视差弹性、弹簧滑动胶囊、卡片 hover 抬升、按钮光泽扫过、网格 stagger 入场、评分卡片弹簧飞出、完成圆环描画；遵循系统「减少动态效果」全降级；
-- **色彩**：品牌渐变（蓝→靛→紫）、iOS 原色状态体系、明暗双主题严格一致，粒子背景自动配色。
+- **Liquid glass**: glass controls float like a water droplet — top highlight (droplet reflection), bottom caustics, Fresnel rim light, contact shadow; SDF displacement + `feDisplacementMap` produce natural refraction, falling back to plain blur where `url()` is unsupported;
+- **Motion**: blur + parallax spring transitions, sliding capsules, card hover lift, button sheen, staggered grid entrances, spring-out review cards, ring-drawn completion; everything degrades with the system "reduce motion" setting;
+- **Color**: brand gradient (blue → indigo → violet), iOS-native status colors, strictly consistent light/dark themes, auto-theming particle background.
 
-## 界面预览
+## Screenshots
 
-| 主界面（深色主题） | 数据分析报告（深色主题） |
+| Main UI (dark theme) | Analytics report (dark theme) |
 | --- | --- |
-| ![主界面](shot-final-dark.png) | ![数据分析报告](shot-perf-dark.png) |
+| ![Main UI](shot-final-dark.png) | ![Analytics report](shot-perf-dark.png) |
 
-## 技术栈
+## Tech stack
 
-- **React 19 + TypeScript + Vite** —— 应用主体
-- **Motion** —— 弹簧与手势动效
-- **Three.js** —— 招式网络三维引擎（按需加载，不影响首屏）
-- **IndexedDB** —— 题目 / 方法 / 图片 Blob 全部保存在本机浏览器
+- **React 19 + TypeScript + Vite** — application core
+- **Motion** — spring & gesture animations
+- **Three.js** — 3D network graph engine (lazy-loaded, no first-paint cost)
+- **IndexedDB** — problems, methods and image blobs stay on-device
 
-## 快速开始
+## Getting started
 
 ```bash
 npm install
-npm run dev        # 开发模式，默认 http://localhost:5173
-npm run build      # 类型检查 + 生产构建
-npm run preview    # 预览生产构建
-npm run serve      # 本地部署：零依赖静态服务，默认 http://localhost:5173
+npm run dev        # dev server, http://localhost:5173
+npm run build      # type-check + production build
+npm run preview    # preview the production build
+npm run serve      # zero-dependency static server, http://localhost:5173
 ```
 
-Windows 下直接双击根目录 **`启动本地版.bat`**：自动构建生产版本、启动本地服务并打开浏览器；5173 被占用时自动顺延（5174、5175…），数据与开发模式互通。手机端可连同一 WiFi 扫码访问。
+On Windows, double-click **`启动本地版.bat`** to build, serve and open the app; if port 5173 is busy it automatically falls back to 5174/5175… with shared data. Phones on the same Wi-Fi can scan the QR code to open the library.
 
-## 数据与隐私
+## Data & privacy
 
-- 所有数据（含图片）仅存于浏览器 IndexedDB（数据库名 `math-problem-bank`），**不经过任何服务器**；
-- 录入图片自动压缩（最长边 1920px、质量 0.85），SVG / GIF 保持原样；
-- 文字仅作元数据（标题、来源、标签、步骤说明），题目与思路本体均为图片；
-- 局域网同步仅在**同一 WiFi** 下通过本地服务端进行。
+- All data (including images) lives in browser IndexedDB (database `math-problem-bank`) — **never sent to any server**;
+- Images are compressed on import (max 1920px, quality 0.85); SVG/GIF are kept as-is;
+- Text is metadata only (title, source, tags, steps); the problems and solutions themselves are images;
+- LAN sync runs through the local server on the **same Wi-Fi** only.
 
-## 自动化验证
+## Automated validation
 
 ```bash
 npm run check
 ```
 
-- `scripts/audit.mjs`：无头 Chrome 检查图片加载、布局溢出、毛玻璃降级、深色模式、粒子背景、移动端适配等 20 余项指标；
-- `scripts/e2e.mjs`：端到端走查新增 → 编辑 → 搜索 → 回看 → 解法剧场 → 招式网络 → 认知回看 → 数据分析 → 局域网同步等完整链路。
+- `scripts/audit.mjs` — headless-Chrome checks for image loading, layout overflow, glassmorphism fallback, dark mode, particle background, mobile layout and 20+ more metrics;
+- `scripts/e2e.mjs` — end-to-end walkthrough of create → edit → search → review → theater → knowledge graph → cognitive review → analytics → LAN sync.
 
-## 目录结构
+## Project structure
 
 ```text
 src/
-  db/            IndexedDB 封装与预置种子数据
-  hooks/         数据仓库、Blob URL、媒体查询
-  components/    题库、详情、表单、方法库、招式网络、报告等页面与组件
-  components/ui/ 通用 UI（Sheet、灯箱、分段控件、标签输入…）
-  styles/        设计系统（明暗主题、毛玻璃、排版、减少动效）
-  utils/         图片处理、压缩、ZIP、复习排期等工具
+  db/            IndexedDB wrapper & seed data
+  hooks/         data store, blob URLs, media queries
+  components/    library, detail, forms, methods, network, report & more
+  components/ui/ shared UI (sheet, lightbox, segmented, tag input…)
+  styles/        design system (light/dark themes, glassmorphism, reduced motion)
+  utils/         image, compression, zip, review scheduling & more
 scripts/         serve / netinfo / bridge / audit / e2e / visual-check
 ```
 
