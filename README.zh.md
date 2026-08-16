@@ -8,6 +8,7 @@
 [![React](https://img.shields.io/badge/React-19-61dafb?logo=react)](https://react.dev)
 [![TypeScript](https://img.shields.io/badge/TypeScript-7-3178c6?logo=typescript)](https://www.typescriptlang.org)
 [![Vite](https://img.shields.io/badge/Vite-8-646cff?logo=vite)](https://vite.dev)
+[![Release v1.10.0](https://img.shields.io/badge/Release-v1.10.0-2ea44f?logo=github)](https://github.com/h3587729196-cyber/math-problem-bank/releases/tag/v1.10.0)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/h3587729196-cyber/math-problem-bank/pulls)
 
 ## 为什么做这个项目
@@ -62,6 +63,18 @@ Canvas 驱动的交互式物理粒子场，作为整个应用的氛围背景：
 - **Three.js** —— 招式网络三维引擎（按需加载，不影响首屏）
 - **IndexedDB** —— 题目 / 方法 / 图片 Blob 全部保存在本机浏览器
 
+## 下载与安装（v1.10.0）
+
+从[最新 Release](https://github.com/h3587729196-cyber/math-problem-bank/releases)下载开箱即用的安装包：
+
+| 文件 | 说明 |
+| --- | --- |
+| `Math-Problem-Bank-v1.10.0-win-x64-setup.exe` | Windows 安装程序 —— 安装到 `%LOCALAPPDATA%\MathProblemBank`，自动创建桌面与开始菜单快捷方式并启动应用 |
+| `Math-Problem-Bank-v1.10.0-win-x64-portable.zip` | 便携版 —— 解压到任意位置，双击 `start.bat` 即可运行 |
+
+> 两个包均 100% 离线运行，仅需 [Node.js ≥ 20](https://nodejs.org)。
+> 安装程序未签名，首次运行 Windows SmartScreen 可能提示，选择「仍要运行」即可。
+
 ## 快速开始
 
 ```bash
@@ -102,6 +115,13 @@ src/
   utils/         图片处理、压缩、ZIP、复习排期等工具
 scripts/         serve / netinfo / bridge / audit / e2e / visual-check
 ```
+
+## 更新日志
+
+### v1.10.0 —— 动态粒子背景（重点更新）
+- **动态粒子背景（本次重点）**：物理驱动的弹性粒子场（蜂窝网格约 4500 颗粒子），三重指针律动——高斯尾流冲刷、扩散涟漪、沙流喷射；弹簧回位、双主题自适应与无障碍降级；
+- **安装包**：首个 Windows 发行版——自解压 `setup.exe` 安装程序与便携 ZIP 包；
+- 官方双语文档、MIT 许可与项目元数据。
 
 ## License
 

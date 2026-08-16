@@ -1,7 +1,7 @@
 {
   "name": "math-problem-bank",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.10.0",
   "type": "module",
   "description": "难题库 —— 以图片保存数学难题与解题思路的本地数学题库",
   "license": "MIT",

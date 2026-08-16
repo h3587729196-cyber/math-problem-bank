@@ -8,6 +8,7 @@ English | [中文](README.zh.md)
 [![React](https://img.shields.io/badge/React-19-61dafb?logo=react)](https://react.dev)
 [![TypeScript](https://img.shields.io/badge/TypeScript-7-3178c6?logo=typescript)](https://www.typescriptlang.org)
 [![Vite](https://img.shields.io/badge/Vite-8-646cff?logo=vite)](https://vite.dev)
+[![Release v1.10.0](https://img.shields.io/badge/Release-v1.10.0-2ea44f?logo=github)](https://github.com/h3587729196-cyber/math-problem-bank/releases/tag/v1.10.0)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/h3587729196-cyber/math-problem-bank/pulls)
 
 ## Why
@@ -62,6 +63,19 @@ An interactive, physics-driven particle field rendered on a canvas behind the wh
 - **Three.js** — 3D network graph engine (lazy-loaded, no first-paint cost)
 - **IndexedDB** — problems, methods and image blobs stay on-device
 
+## Download & install (v1.10.0)
+
+The fastest way to use the app is to grab a ready-to-run package from the
+[latest release](https://github.com/h3587729196-cyber/math-problem-bank/releases).
+
+| Asset | Description |
+| --- | --- |
+| `Math-Problem-Bank-v1.10.0-win-x64-setup.exe` | Windows installer — installs to `%LOCALAPPDATA%\MathProblemBank`, creates Desktop & Start Menu shortcuts, and launches the app |
+| `Math-Problem-Bank-v1.10.0-win-x64-portable.zip` | Portable package — unzip anywhere and double-click `start.bat` |
+
+> Both packages run 100% offline and require only [Node.js ≥ 20](https://nodejs.org).
+> The installer is unsigned, so Windows SmartScreen may show a warning on first run.
+
 ## Getting started
 
 ```bash
@@ -102,6 +116,13 @@ src/
   utils/         image, compression, zip, review scheduling & more
 scripts/         serve / netinfo / bridge / audit / e2e / visual-check
 ```
+
+## Changelog
+
+### v1.10.0 — dynamic particle background
+- **Dynamic particle background (headline)**: a physics-driven elastic particle field (~4,500 particles on a honeycomb grid) with triple pointer motion — Gaussian wake wash, expanding ripples and sand-stream jetting — plus spring snap-back, theme-adaptive colors and accessibility fallbacks;
+- **Packaged installers**: first Windows distribution — a self-extracting `setup.exe` installer and a portable ZIP;
+- Official bilingual documentation, MIT license and project metadata.
 
 ## License
 
