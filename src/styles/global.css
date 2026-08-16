@@ -24,17 +24,20 @@
   --blur-strong: saturate(195%) blur(42px);
   --blur-card: saturate(175%) blur(14px);
 
-  /* 水珠：晶莹剔透的凸面水滴 */
+  /* 水珠：晶莹剔透的凸面水滴（双高光：顶部镜面 + 右下透射光；底部厚度内影） */
   --glass-drop: rgba(255, 255, 255, 0.46);
-  --drop-highlight: radial-gradient(120% 85% at 16% 6%, rgba(255, 255, 255, 0.95), rgba(255, 255, 255, 0) 46%);
+  --drop-highlight:
+    radial-gradient(120% 85% at 16% 6%, rgba(255, 255, 255, 0.95), rgba(255, 255, 255, 0) 46%),
+    radial-gradient(55% 42% at 74% 84%, rgba(255, 255, 255, 0.3), rgba(255, 255, 255, 0) 62%);
   --drop-caustic: radial-gradient(150% 120% at 50% 122%, rgba(255, 255, 255, 0.42), rgba(255, 255, 255, 0) 52%);
-  --drop-rim: inset 0 0 0 1px rgba(255, 255, 255, 0.32), inset 0 1.5px 0 rgba(255, 255, 255, 0.95),
-    inset 0 -1px 0 rgba(255, 255, 255, 0.28);
+  --drop-rim: inset 0 0 0 1px rgba(255, 255, 255, 0.34), inset 0 1.5px 0 rgba(255, 255, 255, 0.95),
+    inset 0 -2.5px 6px rgba(255, 255, 255, 0.2);
   --drop-shadow: 0 2px 5px rgba(17, 17, 26, 0.1), 0 12px 26px rgba(17, 17, 26, 0.16);
-  /* 液态玻璃透镜链：真实折射（feDisplacementMap）+ 雾面 + 饱和/对比/亮度 */
-  --lens-large: url(#lq-lens) blur(12px) saturate(180%) contrast(1.06) brightness(1.05);
-  --lens-medium: url(#lq-lens) blur(8px) saturate(165%) contrast(1.05) brightness(1.04);
-  --lens-small: url(#lq-lens) blur(4px) saturate(150%) contrast(1.04) brightness(1.04);
+  /* 液态玻璃透镜链（分层）：主玻璃纯模糊+饱和（去掉昂贵的 SVG 位移，
+     保证粒子背景在玻璃下的合成保持 60fps）/ 悬浮层 / 行内控件 */
+  --lens-large: blur(18px) saturate(185%) contrast(1.05) brightness(1.05);
+  --lens-medium: blur(12px) saturate(175%) contrast(1.04) brightness(1.04);
+  --lens-small: blur(7px) saturate(160%) contrast(1.04) brightness(1.04);
   /* 液态光斑：顶部高光带 + 角落折射光斑 */
 
   /* Light */
@@ -47,7 +50,7 @@
   --glass-border: rgba(255, 255, 255, 0.72);
   --glass-highlight: rgba(255, 255, 255, 0.92);
   --chrome: rgba(250, 250, 252, 0.68);
-  --chrome-strong: rgba(250, 250, 252, 0.92);
+  --chrome-strong: rgba(250, 250, 252, 0.84);
   --text: #1d1d1f;
   --text-2: rgba(60, 60, 67, 0.6);
   --text-3: rgba(60, 60, 67, 0.36);
@@ -99,7 +102,7 @@
     --glass-border: rgba(255, 255, 255, 0.14);
     --glass-highlight: rgba(255, 255, 255, 0.18);
     --chrome: rgba(22, 22, 27, 0.62);
-    --chrome-strong: rgba(24, 24, 29, 0.92);
+    --chrome-strong: rgba(24, 24, 29, 0.86);
     --text: #f5f5f7;
     --text-2: rgba(235, 235, 245, 0.62);
     --text-3: rgba(235, 235, 245, 0.38);
@@ -121,6 +124,14 @@
     --shadow-lg: 0 10px 30px rgba(0, 0, 0, 0.52), 0 36px 80px rgba(0, 0, 0, 0.64);
     --shadow-hover: 0 6px 16px rgba(0, 0, 0, 0.5), 0 28px 64px rgba(0, 0, 0, 0.66);
     --scrim: rgba(0, 0, 0, 0.55);
+    /* 深色玻璃：去炫光，干净微边 */
+    --glass-drop: rgba(24, 24, 29, 0.62);
+    --drop-highlight:
+      radial-gradient(120% 85% at 16% 6%, rgba(255, 255, 255, 0.09), rgba(255, 255, 255, 0) 46%),
+      radial-gradient(55% 42% at 74% 84%, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0) 62%);
+    --drop-caustic: radial-gradient(150% 120% at 50% 122%, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0) 52%);
+    --drop-rim: inset 0 0 0 1px rgba(255, 255, 255, 0.1), inset 0 1.5px 0 rgba(255, 255, 255, 0.12),
+      inset 0 -2.5px 6px rgba(255, 255, 255, 0.04);
   }
 }
 
@@ -134,7 +145,7 @@ html[data-theme="light"] {
   --glass-border: rgba(255, 255, 255, 0.72);
   --glass-highlight: rgba(255, 255, 255, 0.92);
   --chrome: rgba(250, 250, 252, 0.68);
-  --chrome-strong: rgba(250, 250, 252, 0.92);
+  --chrome-strong: rgba(250, 250, 252, 0.84);
   --text: #1d1d1f;
   --text-2: rgba(60, 60, 67, 0.6);
   --text-3: rgba(60, 60, 67, 0.36);
@@ -169,7 +180,7 @@ html[data-theme="dark"] {
   --glass-border: rgba(255, 255, 255, 0.14);
   --glass-highlight: rgba(255, 255, 255, 0.18);
   --chrome: rgba(22, 22, 27, 0.62);
-  --chrome-strong: rgba(24, 24, 29, 0.92);
+  --chrome-strong: rgba(24, 24, 29, 0.86);
   --text: #f5f5f7;
   --text-2: rgba(235, 235, 245, 0.62);
   --text-3: rgba(235, 235, 245, 0.38);
@@ -183,11 +194,13 @@ html[data-theme="dark"] {
   --indigo-text: #a5a2ff;
   --cyan: #64d2ff;
   --grid: rgba(255, 255, 255, 0.06);
-  --glass-drop: rgba(26, 26, 31, 0.5);
-  --drop-highlight: radial-gradient(120% 85% at 16% 6%, rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0) 46%);
-  --drop-caustic: radial-gradient(150% 120% at 50% 122%, rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0) 52%);
-  --drop-rim: inset 0 0 0 1px rgba(255, 255, 255, 0.22), inset 0 1.5px 0 rgba(255, 255, 255, 0.55),
-    inset 0 -1px 0 rgba(255, 255, 255, 0.15);
+  --glass-drop: rgba(24, 24, 29, 0.62);
+  --drop-highlight:
+    radial-gradient(120% 85% at 16% 6%, rgba(255, 255, 255, 0.09), rgba(255, 255, 255, 0) 46%),
+    radial-gradient(55% 42% at 74% 84%, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0) 62%);
+  --drop-caustic: radial-gradient(150% 120% at 50% 122%, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0) 52%);
+  --drop-rim: inset 0 0 0 1px rgba(255, 255, 255, 0.1), inset 0 1.5px 0 rgba(255, 255, 255, 0.12),
+    inset 0 -2.5px 6px rgba(255, 255, 255, 0.04);
   --drop-shadow: 0 2px 6px rgba(0, 0, 0, 0.4), 0 14px 30px rgba(0, 0, 0, 0.5);
   --green-text: #32d74b;
   --orange-text: #ffd60a;
@@ -257,6 +270,9 @@ body {
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
   overflow: hidden;
+  /* 深邃黑 + 极淡蓝紫光晕：粒子层之下仍有呼吸感 */
+  background-image: var(--grad-hero);
+  background-attachment: fixed;
 }
 
 button,
@@ -324,7 +340,7 @@ img {
   background: var(--drop-caustic), var(--drop-highlight), var(--glass-strong);
   -webkit-backdrop-filter: var(--blur-card);
   backdrop-filter: var(--blur-card);
-  border: 1px solid rgba(255, 255, 255, 0.4);
+  border: 1px solid var(--glass-border);
   box-shadow: var(--drop-rim), var(--drop-shadow);
   font-size: 13px;
   font-weight: 600;
@@ -368,7 +384,17 @@ img {
 
 /* ---------- 布局 ---------- */
 
+/* 粒子背景：固定画布，位于应用底层；正文层在其之上 */
+.particle-bg {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+
 .app {
+  position: relative;
+  z-index: 1;
   height: 100dvh;
   display: flex;
 }
@@ -377,12 +403,13 @@ img {
   flex: 1;
   min-width: 0;
   overflow-y: auto;
-  padding: 38px 44px 100px;
+  padding: 42px 48px 100px;
   scroll-behavior: smooth;
-  max-width: 1260px;
+  max-width: 1280px;
   margin: 0 auto;
   width: 100%;
-  background: var(--grad-hero);
+  /* 透明背景：让底层粒子透过毛玻璃控件折射，正文仍靠低对比粒子保证可读 */
+  background: transparent;
 }
 
 .page-head {
@@ -390,7 +417,7 @@ img {
   align-items: flex-end;
   justify-content: space-between;
   gap: 20px;
-  margin-bottom: 28px;
+  margin-bottom: 30px;
 }
 
 .page-title {
@@ -412,7 +439,7 @@ img {
 /* ---------- 侧栏（浮动玻璃坞） ---------- */
 
 .sidebar {
-  width: 250px;
+  width: 252px;
   flex-shrink: 0;
   margin: 14px 0 14px 14px;
   height: calc(100dvh - 28px);
@@ -421,9 +448,9 @@ img {
   backdrop-filter: blur(16px) saturate(175%);
   -webkit-backdrop-filter: var(--lens-large);
   backdrop-filter: var(--lens-large);
-  border: 1px solid rgba(255, 255, 255, 0.4);
+  border: 1px solid var(--glass-border);
   border-radius: var(--radius-xl);
-  box-shadow: var(--drop-rim), var(--drop-shadow);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12), var(--drop-rim), var(--drop-shadow);
   display: flex;
   flex-direction: column;
   padding: 18px 12px 14px;
@@ -436,7 +463,7 @@ img {
   display: flex;
   align-items: center;
   gap: 11px;
-  padding: 6px 10px 18px;
+  padding: 6px 10px 20px;
 }
 
 .brand-mark {
@@ -447,7 +474,7 @@ img {
   color: #fff;
   display: grid;
   place-items: center;
-  box-shadow: 0 6px 18px rgba(10, 132, 255, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+  box-shadow: 0 6px 20px rgba(10, 132, 255, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.45);
   position: relative;
   overflow: hidden;
 }
@@ -457,6 +484,12 @@ img {
   position: absolute;
   inset: 0;
   background: linear-gradient(160deg, rgba(255, 255, 255, 0.5), transparent 55%);
+}
+
+.brand-mark svg {
+  position: relative;
+  z-index: 1;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.25));
 }
 
 .brand-name {
@@ -478,27 +511,50 @@ img {
 }
 
 .nav-item {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 12px;
   width: 100%;
-  padding: 9px 12px;
-  border-radius: var(--radius-sm);
-  color: var(--text);
+  padding: 10px 13px;
+  border-radius: 13px;
+  color: var(--text-2);
   font-size: 15px;
   font-weight: 500;
-  transition: background 140ms var(--ease-out), transform 140ms var(--ease-out);
+  letter-spacing: -0.005em;
+  transition: color 160ms var(--ease-out), transform 160ms var(--ease-out);
+}
+
+.nav-item > svg,
+.nav-item > span {
+  position: relative;
+  z-index: 1;
 }
 
 .nav-item:hover {
-  background: var(--surface-2);
+  color: var(--text);
   transform: translateX(1px);
 }
 
+/* 活动胶囊：弹簧滑动，水珠渐变底 + 内高光 */
+.nav-pill {
+  position: absolute;
+  inset: 0;
+  border-radius: 13px;
+  background: var(--grad-brand-soft);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16), inset 0 0 0 1px rgba(255, 255, 255, 0.07),
+    0 2px 10px rgba(10, 132, 255, 0.18);
+  z-index: 0;
+}
+
 .nav-item.active {
-  background: var(--accent-soft);
   color: var(--accent-2);
   font-weight: 650;
+}
+
+.nav-item.active svg {
+  color: var(--accent-2);
+  filter: drop-shadow(0 0 6px rgba(10, 132, 255, 0.5));
 }
 
 .nav-item .count {
@@ -514,7 +570,7 @@ img {
 
 .nav-item.active .count {
   color: var(--accent-2);
-  background: rgba(10, 132, 255, 0.16);
+  background: rgba(10, 132, 255, 0.18);
 }
 
 .sidebar-bottom {
@@ -545,24 +601,9 @@ img {
   font-size: 14px;
   font-weight: 600;
   position: relative;
-  overflow: hidden;
   transition: transform 150ms var(--ease-out), background 150ms var(--ease-out),
     box-shadow 200ms var(--ease-out), opacity 150ms var(--ease-out);
   will-change: transform;
-}
-
-.btn::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(105deg, transparent 42%, rgba(255, 255, 255, 0.34) 50%, transparent 58%);
-  transform: translateX(-130%);
-  transition: transform 0.7s var(--ease-out);
-  pointer-events: none;
-}
-
-.btn:hover::after {
-  transform: translateX(130%);
 }
 
 .btn:active {
@@ -574,28 +615,20 @@ img {
   cursor: not-allowed;
 }
 
-.btn:disabled::after {
-  display: none;
-}
-
 .btn-primary {
   background: var(--accent);
   color: #fff;
-  box-shadow: 0 5px 16px rgba(10, 132, 255, 0.34);
 }
 
 .btn-primary:hover {
   background: var(--accent-2);
-  box-shadow: 0 7px 22px rgba(10, 132, 255, 0.42);
 }
 
 .btn-ghost {
   background: var(--drop-caustic), var(--drop-highlight), var(--glass-drop);
-  -webkit-backdrop-filter: blur(10px) saturate(160%);
-  backdrop-filter: blur(10px) saturate(160%);
-  -webkit-backdrop-filter: var(--lens-medium);
-  backdrop-filter: var(--lens-medium);
-  border: 1px solid rgba(255, 255, 255, 0.4);
+  -webkit-backdrop-filter: var(--lens-small);
+  backdrop-filter: var(--lens-small);
+  border: 1px solid var(--glass-border);
   box-shadow: var(--drop-rim), var(--drop-shadow);
   color: var(--text);
 }
@@ -705,7 +738,7 @@ img {
   padding-left: 38px;
   border-radius: 12px;
   background: var(--drop-caustic), var(--drop-highlight), var(--glass-drop);
-  border: 1px solid rgba(255, 255, 255, 0.4);
+  border: 1px solid var(--glass-border);
   box-shadow: var(--drop-rim);
 }
 
@@ -721,6 +754,7 @@ img {
 /* ---------- 筛选栏 ---------- */
 
 .filters {
+  position: relative;
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
@@ -729,11 +763,9 @@ img {
   padding: 10px 12px;
   border-radius: 18px;
   background: var(--drop-caustic), var(--drop-highlight), var(--glass);
-  -webkit-backdrop-filter: blur(10px) saturate(160%);
-  backdrop-filter: blur(10px) saturate(160%);
-  -webkit-backdrop-filter: var(--lens-medium);
-  backdrop-filter: var(--lens-medium);
-  border: 1px solid rgba(255, 255, 255, 0.4);
+  -webkit-backdrop-filter: var(--lens-small);
+  backdrop-filter: var(--lens-small);
+  border: 1px solid var(--glass-border);
   box-shadow: var(--drop-rim), 0 3px 9px rgba(17, 17, 26, 0.08);
 }
 
@@ -755,11 +787,9 @@ img {
 .segmented {
   display: inline-flex;
   background: var(--drop-caustic), var(--drop-highlight), var(--glass-drop);
-  -webkit-backdrop-filter: blur(10px) saturate(160%);
-  backdrop-filter: blur(10px) saturate(160%);
-  -webkit-backdrop-filter: var(--lens-medium);
-  backdrop-filter: var(--lens-medium);
-  border: 1px solid rgba(255, 255, 255, 0.4);
+  -webkit-backdrop-filter: var(--lens-small);
+  backdrop-filter: var(--lens-small);
+  border: 1px solid var(--glass-border);
   border-radius: 13px;
   padding: 3px;
   gap: 2px;
@@ -796,22 +826,10 @@ img {
   font-weight: 500;
   color: var(--text-2);
   background: var(--drop-caustic), var(--drop-highlight), var(--glass-drop);
-  border: 1px solid rgba(255, 255, 255, 0.4);
+  border: 1px solid var(--glass-border);
   box-shadow: var(--drop-rim);
   cursor: default;
   white-space: nowrap;
-}
-
-.chip::before {
-  content: "";
-  position: absolute;
-  left: 10%;
-  top: 8%;
-  width: 26%;
-  height: 30%;
-  border-radius: 50%;
-  background: radial-gradient(closest-side, rgba(255, 255, 255, 0.95), rgba(255, 255, 255, 0));
-  pointer-events: none;
 }
 
 .chip button {
@@ -839,7 +857,7 @@ img {
   gap: 6px;
   align-items: center;
   background: var(--drop-caustic), var(--drop-highlight), var(--glass-drop);
-  border: 1px solid rgba(255, 255, 255, 0.4);
+  border: 1px solid var(--glass-border);
   border-radius: 12px;
   padding: 8px 10px;
   cursor: text;
@@ -866,10 +884,8 @@ img {
   z-index: 40;
   margin-top: 6px;
   background: var(--glass-strong);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
-  backdrop-filter: blur(20px) saturate(180%);
-  -webkit-backdrop-filter: var(--lens-large);
-  backdrop-filter: var(--lens-large);
+  -webkit-backdrop-filter: var(--lens-medium);
+  backdrop-filter: var(--lens-medium);
   border: 1px solid var(--glass-border);
   border-radius: 14px;
   box-shadow: var(--shadow-lg), inset 0 1px 0 var(--glass-highlight);
@@ -895,12 +911,12 @@ img {
 
 .grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(256px, 1fr));
-  gap: 18px;
+  grid-template-columns: repeat(auto-fill, minmax(258px, 1fr));
+  gap: 20px;
 }
 
 .card {
-  background: var(--surface);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0) 42%), var(--surface);
   border: 1px solid var(--sep);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-sm);
@@ -943,8 +959,8 @@ img {
 
 .card:hover {
   transform: translateY(-4px);
-  border-color: rgba(120, 120, 128, 0.3);
-  box-shadow: var(--shadow-hover);
+  border-color: rgba(120, 120, 128, 0.36);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07), var(--shadow-hover);
 }
 
 .card-thumb {
@@ -3081,11 +3097,17 @@ img {
 
 .review-card-img {
   width: 100%;
-  height: 216px;
-  object-fit: cover;
+  max-height: 240px;
+  object-fit: contain;
+  object-position: center top;
   border-radius: var(--radius-md);
   border: 1px solid var(--sep);
   background: var(--surface-2);
+  cursor: zoom-in;
+}
+
+.review-card-img:hover {
+  opacity: 0.92;
 }
 
 .review-card-body {
@@ -3238,10 +3260,8 @@ img {
   padding: 9px 18px;
   border-radius: 999px;
   background: var(--glass-strong);
-  -webkit-backdrop-filter: blur(12px) saturate(165%);
-  backdrop-filter: blur(12px) saturate(165%);
-  -webkit-backdrop-filter: var(--lens-medium);
-  backdrop-filter: var(--lens-medium);
+  -webkit-backdrop-filter: var(--lens-small);
+  backdrop-filter: var(--lens-small);
   border: 1px solid var(--glass-border);
   color: var(--green-text);
   font-size: 13px;
@@ -3396,7 +3416,7 @@ img {
 
 @media (max-width: 720px) {
   .review-card-img {
-    height: 172px;
+    max-height: 200px;
   }
 
   .review-grade-row {
@@ -4482,7 +4502,7 @@ img {
   backdrop-filter: blur(16px) saturate(175%);
   -webkit-backdrop-filter: var(--lens-large);
   backdrop-filter: var(--lens-large);
-  border: 1px solid rgba(255, 255, 255, 0.4);
+  border: 1px solid var(--glass-border);
   border-radius: 24px;
   box-shadow: var(--drop-rim), var(--drop-shadow);
   padding: 6px 6px 6px;
@@ -4558,32 +4578,20 @@ img {
   width: 56px;
   height: 56px;
   border-radius: 50%;
-  background: var(--grad-brand);
+  /* 液态水珠：半透明品牌色 + 真实折射背景 + 双高光 */
+  background: rgba(94, 92, 230, 0.72);
+  -webkit-backdrop-filter: var(--lens-medium);
+  backdrop-filter: var(--lens-medium);
   color: #fff;
   display: none;
   place-items: center;
-  position: relative;
-  overflow: hidden;
-  box-shadow: 0 12px 28px rgba(94, 92, 230, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.55),
-    inset 0 -8px 16px rgba(0, 0, 0, 0.18);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18), inset 0 -3px 8px rgba(0, 0, 0, 0.2);
   transition: transform 160ms var(--ease-out), box-shadow 160ms var(--ease-out);
 }
 
-.mobile-fab::after {
-  content: "";
-  position: absolute;
-  left: 20%;
-  top: 12%;
-  width: 38%;
-  height: 32%;
-  border-radius: 50%;
-  background: radial-gradient(closest-side, rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0));
-  pointer-events: none;
-}
-
 .mobile-fab:hover {
-  box-shadow: 0 16px 34px rgba(94, 92, 230, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.6),
-    inset 0 -8px 16px rgba(0, 0, 0, 0.16);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.35),
+    inset 0 -3px 8px rgba(0, 0, 0, 0.18);
 }
 
 .mobile-fab:active {
@@ -5032,10 +5040,8 @@ img {
   border: 1px solid var(--glass-border);
   border-radius: var(--radius-md);
   background: var(--glass);
-  -webkit-backdrop-filter: blur(12px) saturate(165%);
-  backdrop-filter: blur(12px) saturate(165%);
-  -webkit-backdrop-filter: var(--lens-medium);
-  backdrop-filter: var(--lens-medium);
+  -webkit-backdrop-filter: var(--lens-small);
+  backdrop-filter: var(--lens-small);
   min-width: 240px;
   flex: 1 1 280px;
   max-width: 420px;
@@ -5140,10 +5146,8 @@ img {
   border: 1px solid var(--glass-border);
   border-radius: var(--radius-md);
   background: var(--glass);
-  -webkit-backdrop-filter: blur(12px) saturate(165%);
-  backdrop-filter: blur(12px) saturate(165%);
-  -webkit-backdrop-filter: var(--lens-medium);
-  backdrop-filter: var(--lens-medium);
+  -webkit-backdrop-filter: var(--lens-small);
+  backdrop-filter: var(--lens-small);
   gap: 2px;
 }
 
@@ -5222,7 +5226,7 @@ img {
   position: relative;
   padding: 5px 11px;
   border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.4);
+  border: 1px solid var(--glass-border);
   background: var(--drop-caustic), var(--drop-highlight), var(--glass-drop);
   box-shadow: var(--drop-rim);
   color: var(--text-2);
@@ -5265,6 +5269,12 @@ img {
 .filter-chip.s-stuck.active {
   background: var(--red-soft);
   color: var(--red-text);
+}
+
+.filter-chip.role-core.active {
+  background: var(--accent-soft);
+  color: var(--accent-2);
+  border-color: rgba(10, 132, 255, 0.45);
 }
 
 .filter-chip.role-auxiliary.active {
@@ -5379,6 +5389,11 @@ img {
   border-top: 2.5px solid var(--accent-2);
   flex-shrink: 0;
   border-radius: 2px;
+}
+
+.edge-key.role-core {
+  border-top-style: solid;
+  border-color: var(--accent-2);
 }
 
 .edge-key.role-auxiliary {
@@ -5782,10 +5797,8 @@ img {
   padding: 14px 18px;
   border-radius: var(--radius-lg);
   background: var(--glass);
-  -webkit-backdrop-filter: blur(12px) saturate(165%);
-  backdrop-filter: blur(12px) saturate(165%);
-  -webkit-backdrop-filter: var(--lens-medium);
-  backdrop-filter: var(--lens-medium);
+  -webkit-backdrop-filter: var(--lens-small);
+  backdrop-filter: var(--lens-small);
   border: 1px solid var(--glass-border);
   box-shadow: var(--shadow-sm), inset 0 1px 0 var(--glass-highlight);
   min-height: 58px;
@@ -6018,4 +6031,89 @@ img {
 
 .qr-steps p {
   margin: 0;
+}
+
+/* ============================================================
+   高级元素：聚光玻璃 · 流光骨架屏 · 空状态浮动
+   ============================================================ */
+
+/* ---------- 聚光：跟随鼠标的全局柔光（单一 overlay，零重绘开销） ---------- */
+.cursor-light {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background: radial-gradient(
+    520px circle at var(--mx, -300px) var(--my, -300px),
+    rgba(150, 150, 195, 0.06),
+    transparent 62%
+  );
+}
+
+/* ---------- 流光骨架屏 ---------- */
+.skeleton {
+  position: relative;
+  overflow: hidden;
+  border-radius: 10px;
+  background: var(--surface-2);
+}
+
+.skeleton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(150, 150, 165, 0.16),
+    transparent
+  );
+  animation: skeleton-shimmer 1.5s infinite;
+}
+
+@keyframes skeleton-shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+.skeleton-card {
+  pointer-events: none;
+}
+
+.skeleton-card .thumb {
+  border-radius: 0;
+}
+
+.skeleton .line {
+  height: 13px;
+  border-radius: 7px;
+}
+
+.btn-skel {
+  border-radius: 14px;
+  flex-shrink: 0;
+}
+
+/* ---------- 空状态图标浮动 ---------- */
+.empty-icon {
+  animation: empty-float 3.2s ease-in-out infinite;
+}
+
+@keyframes empty-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-7px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton::after,
+  .empty-icon {
+    animation: none;
+  }
 }

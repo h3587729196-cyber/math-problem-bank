@@ -34,8 +34,8 @@ interface NetworkViewProps {
  * 右侧毛玻璃「解剖面板」展示信号/步骤/易错点/图片/解法清单。
  * Esc 飞回全景。
  *
- * 引擎：自研轻量 3D（透视投影 + 相机弹簧飞行 + Canvas 渲染），
- * 零依赖；三层视差星野 + 星云 + 深度雾，60fps。
+ * 引擎：three.js（WebGLRenderer + EffectComposer + UnrealBloom），
+ * 相机弹簧飞行 + 三层视差星野 + 星云 + 深度雾；按需懒加载，不影响首屏。
  * ========================================================== */
 
 /* ---------- 数学与常量 ---------- */
@@ -378,7 +378,11 @@ export interface MechLayout {
   goals: Map<string, V3>;
 }
 
-/** 全景种子布局：方法=外环（枢纽在前）、题目=靠近其主方法的内部位置；力导向随后接管 */
+/**
+ * 全景种子布局（社区感知）：连通分量=知识岛，每个社区占据一个
+ * 角度扇区（扇区大小 ∝ 成员方法度数总和），岛内方法沿弧线排布；
+ * 题目靠近其主方法（0.58 半径处）；力导向随后接管微调。
+ */
 function buildMechanical(sim: SimModel): MechLayout {
   const goals = new Map<string, V3>();
 
@@ -396,15 +400,30 @@ function buildMechanical(sim: SimModel): MechLayout {
     if (mId) assign.set(p.id, mId);
   }
 
-  // 方法外环：按关联数降序，枢纽先排（朝前）
+  // 方法外环：按社区（连通分量）分扇区，扇区大小 ∝ 社区度数总和
   const ms = sim.nodes
     .filter((n) => n.type === "method")
     .sort((a, b) => b.deg - a.deg);
+  const commWeight = new Map<number, number>();
+  for (const m of ms) {
+    commWeight.set(m.community, (commWeight.get(m.community) ?? 0) + m.deg + 1);
+  }
+  const comms = [...commWeight.entries()].sort((a, b) => b[1] - a[1]);
+  const totalWeight = comms.reduce((s, [, w]) => s + w, 0) || 1;
+
   const R = 300;
-  ms.forEach((m, i) => {
-    const a = (i / Math.max(1, ms.length)) * TAU + Math.PI * 0.5;
-    goals.set(m.id, v3(Math.cos(a) * R, 0, Math.sin(a) * R));
-  });
+  let angleCursor = Math.PI * 0.5;
+  for (const [commId, weight] of comms) {
+    const members = ms.filter((m) => m.community === commId);
+    const span = (weight / totalWeight) * TAU;
+    members.forEach((m, i) => {
+      // 岛内方法沿扇区弧线排布（留出扇区边界空隙），枢纽靠扇区起始端
+      const t = members.length <= 1 ? 0.5 : i / (members.length - 1);
+      const a = angleCursor + span * (0.15 + 0.7 * t);
+      goals.set(m.id, v3(Math.cos(a) * R, 0, Math.sin(a) * R));
+    });
+    angleCursor += span;
+  }
 
   // 题目：靠近主方法（0.58 半径处 + 切线抖动）
   ms.forEach((m) => {
@@ -1243,7 +1262,7 @@ export function NetworkView({
       <div className="network-legend">
         <span className="legend-item">
           <i className="dot method" />
-          方法（大 = 关联多）
+          方法（蓝=熟练 · 橙=掌握度低）
         </span>
         <span className="legend-item">
           <i className="dot s-todo" />
@@ -1296,9 +1315,10 @@ export function NetworkView({
           const dim = isDim(n.id);
           const isNeighbor =
             insideId != null && (sim.neighbors.get(insideId) ?? new Set()).has(n.id);
+          // 关键标签：枢纽方法（被 ≥2 题使用）+ 选中/邻域；全部标签：所有方法
           const showLabel =
             n.type === "method"
-              ? labelDensity === "all" || isSelected || isNeighbor || true
+              ? labelDensity === "all" || isSelected || isNeighbor || n.deg >= 2
               : zoomedIn || isSelected || isNeighbor;
           const cls = [
             "network-node",

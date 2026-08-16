@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
-import { AnimatePresence, motion } from "motion/react";
+import { useDeferredValue, useEffect, useMemo, useState } from "react";
+import { AnimatePresence } from "motion/react";
 import type { Problem, ProblemStatus, TagStat } from "../types";
 import { STATUS_LABEL } from "../types";
 import { DIFFICULTY_LABEL, formatDate } from "../utils/format";
 import { useBlobUrl } from "../hooks/useBlobUrl";
+import { AnimatedCard } from "./ui/AnimatedCard";
 import { ThoughtSearch } from "./ThoughtSearch";
 import { Segmented } from "./ui/Segmented";
 import { Empty } from "./ui/Empty";
@@ -30,25 +31,7 @@ function ProblemCard({ problem, onOpen }: { problem: Problem; onOpen: () => void
   const url = useBlobUrl(mainImage?.blob);
 
   return (
-    <motion.div
-      role="button"
-      tabIndex={0}
-      layout
-      className="card"
-      initial={{ opacity: 0, scale: 0.97, y: 8 }}
-      animate={{ opacity: 1, scale: 1, y: 0 }}
-      exit={{ opacity: 0, scale: 0.97 }}
-      transition={{ type: "spring", bounce: 0.18, duration: 0.45 }}
-      whileHover={{ y: -3 }}
-      whileTap={{ scale: 0.98 }}
-      onClick={onOpen}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          onOpen();
-        }
-      }}
-    >
+    <AnimatedCard className="card" onOpen={onOpen}>
       <div className="card-thumb">
         {url ? <img src={url} alt={problem.title} /> : <ImageIcon size={30} />}
       </div>
@@ -69,12 +52,13 @@ function ProblemCard({ problem, onOpen }: { problem: Problem; onOpen: () => void
           </span>
         </div>
       </div>
-    </motion.div>
+    </AnimatedCard>
   );
 }
 
 export function Library({ problems, allTags, onOpen, onAdd }: LibraryProps) {
   const [query, setQuery] = useState("");
+  const deferredQuery = useDeferredValue(query);
   const [status, setStatus] = useState<StatusFilter>("all");
   const [difficulty, setDifficulty] = useState<"all" | "1" | "2" | "3" | "4" | "5">("all");
   const [tag, setTag] = useState<string>("all");
@@ -85,10 +69,10 @@ export function Library({ problems, allTags, onOpen, onAdd }: LibraryProps) {
 
   useEffect(() => {
     setVisible(PAGE_SIZE);
-  }, [query, status, difficulty, tag, sort, pool, solutions]);
+  }, [deferredQuery, status, difficulty, tag, sort, pool, solutions]);
 
   const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
+    const q = deferredQuery.trim().toLowerCase();
     let list = problems.filter((p) => {
       if (status !== "all" && p.status !== status) return false;
       if (difficulty !== "all" && p.difficulty !== Number(difficulty)) return false;
@@ -111,7 +95,7 @@ export function Library({ problems, allTags, onOpen, onAdd }: LibraryProps) {
       return a.title.localeCompare(b.title, "zh-Hans-CN");
     });
     return list;
-  }, [problems, query, status, difficulty, tag, sort, solutions]);
+  }, [problems, deferredQuery, status, difficulty, tag, sort, solutions]);
 
   const shown = filtered.slice(0, visible);
 
@@ -220,7 +204,7 @@ export function Library({ problems, allTags, onOpen, onAdd }: LibraryProps) {
       {pool === "thought" ? (
         <ThoughtSearch
           problems={problems}
-          query={query}
+          query={deferredQuery}
           status={status}
           difficulty={difficulty}
           tag={tag}

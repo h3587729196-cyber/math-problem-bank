@@ -6,17 +6,31 @@ import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment
 import type { ExtraOrb, MechLayout, Node3, SimModel, V3 } from "./NetworkView";
 
 /* ============================================================
- * 招式网络 · three.js 力导向知识图谱引擎
+ * 招式网络 · three.js 力导向知识图谱引擎（架构 v2）
  *
- * 设计目标：方法-题目体系的「可读性」优先，同时保持产品级质感。
- *  - 方法 = 蓝色发光球体（大 = 关联多，永远带标签）
- *  - 题目 = 状态色小球体（绿/橙/红/灰）
- *  - 关联 = 霓虹连线：核心=亮蓝实线 / 辅助=蓝虚线 / 延伸=灰点线
- *  - 方法共题 = 靛紫弧线、题目共法 = 青色弧线
- *  - 三维力导向布局：相连的互相靠近、枢纽居中，结构自然浮现
- *  - 单击高亮邻域（其余淡化）；双击飞入节点：球体变为半透明外壳，
- *    内部展开步骤链（琥珀色）/解法环（简易度着色）+ 邻居环绕
- *  - 阻尼惯性相机 + 弧线 dolly-zoom + 空闲自动环绕 + ACES/Bloom
+ * v2 核心架构升级（保留全部公开接口与交互语义）：
+ *
+ * 1. 空间哈希加速力模拟
+ *    O(n²) 全对全斥力/碰撞 → 网格分桶，只计算相邻 27 格，
+ *    平均 O(n)；节点少（≤48）时自动回退暴力法（哈希开销反超）。
+ *
+ * 2. 收敛冻结 + 按需渲染（省电核心）
+ *    力模拟收敛（动能 < 阈值）、补间清空、相机静止后：
+ *    渲染最后一帧并挂起 requestAnimationFrame——CPU/GPU 占用归零。
+ *    任何交互（拖拽/缩放/飞行/高亮/重建）或空闲自动环绕都会唤醒。
+ *    页面隐藏（visibilitychange）时强制挂起，恢复时唤醒。
+ *
+ * 3. 渲染降级
+ *    UnrealBloom 分辨率随舞台面积自适应（小屏/低端机减半），
+ *    pixelRatio 上限 1.5（移动端），减少填充率压力。
+ *
+ * 4. 模块化分区
+ *    常量/相机/补间/力模拟/渲染/命中层/引擎壳分区清晰，
+ *    数据流单向：交互 API → 状态 → 每帧 tick → render。
+ *
+ * 视觉语义（不变）：方法 = 发光球体（掌握度 <3 显示暖色=薄弱），
+ * 题目 = 状态色球体；核心=亮蓝实线 / 辅助=虚线 / 延伸=点线；
+ * 方法共题=靛紫弧线、题目共法=青色弧线；双击飞入内部结构。
  * ========================================================== */
 
 export interface EngineCamState {
@@ -63,17 +77,34 @@ export interface EngineApi {
   dispose(): void;
 }
 
+/* ================= 常量 ================= */
+
 const BASE_DIST = 1400;
 const MIN_DIST = 300;
 const MAX_DIST = 3200;
 const BASE_FOV = 38;
 const DIVE_FOV = 47;
+/** 力模拟收敛阈值：动能低于此值且无动画 → 挂起渲染循环 */
+const ENERGY_STILL = 0.03;
+const ALPHA_STILL = 0.1;
+/** 空闲自动环绕时长（ms）：环绕结束后收敛休眠；交互随时唤醒并重启 */
+const ORBIT_DURATION = 30000;
+/** 暴力法节点数上限（空间哈希在该规模下开销反超） */
+const BRUTE_FORCE_N = 48;
+/** 空间哈希格边长 = 2×最大节点半径 + 间隙 */
+const HASH_CELL = 2 * 34 + 28;
 
 const STATUS_COLOR: Record<string, number> = {
   solved: 0x34c759,
   todo: 0xff9f0a,
   stuck: 0xff453a,
 };
+/** 方法掌握度 → 球体颜色：<3 薄弱=暖橙，>=3 健康=品牌蓝，未设=灰蓝 */
+const MASTERY_COLOR = {
+  weak: 0xff9f0a,
+  ok: 0x4da3ff,
+  none: 0x4d6f96,
+} as const;
 
 const easeInOutCubic = (t: number) =>
   t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
@@ -85,6 +116,8 @@ const easeOutBack = (t: number) => {
 };
 const clamp01 = (t: number) => Math.min(1, Math.max(0, t));
 
+/* ================= 补间队列 ================= */
+
 interface Tween {
   t0: number;
   delay: number;
@@ -93,9 +126,338 @@ interface Tween {
   apply: (k: number) => void;
 }
 
-function metal(params: THREE.MeshStandardMaterialParameters): THREE.MeshStandardMaterial {
-  return new THREE.MeshStandardMaterial(params);
+class TweenQueue {
+  private list: Tween[] = [];
+  get size(): number {
+    return this.list.length;
+  }
+  push(t: Tween): void {
+    this.list.push(t);
+  }
+  /** 推进补间；返回是否仍有活跃项 */
+  tick(now: number): boolean {
+    for (let i = this.list.length - 1; i >= 0; i--) {
+      const tw = this.list[i];
+      if (now - tw.t0 < tw.delay) continue;
+      const k = clamp01((now - tw.t0 - tw.delay) / Math.max(1, tw.dur));
+      tw.apply(tw.ease(k));
+      if (k >= 1) this.list.splice(i, 1);
+    }
+    return this.list.length > 0;
+  }
+  clear(): void {
+    this.list.length = 0;
+  }
 }
+
+/* ================= 相机 ================= */
+
+class CameraRig {
+  cam: EngineCamState;
+  constructor() {
+    this.cam = {
+      yaw: -0.62,
+      pitch: 0.32,
+      dist: BASE_DIST * 1.6,
+      target: new THREE.Vector3(0, 10, 0),
+      targetYaw: -0.62,
+      targetPitch: 0.32,
+      targetDist: BASE_DIST,
+      fov: BASE_FOV,
+      targetFov: BASE_FOV,
+    };
+  }
+  /** 弹簧逼近一帧；返回是否仍在运动中 */
+  step(camera: THREE.PerspectiveCamera): boolean {
+    const cs = this.cam;
+    cs.yaw += (cs.targetYaw - cs.yaw) * 0.085;
+    cs.pitch += (cs.targetPitch - cs.pitch) * 0.085;
+    cs.dist += (cs.targetDist - cs.dist) * 0.08;
+    const cy = Math.cos(cs.pitch);
+    const sy = Math.sin(cs.pitch);
+    const cx = Math.cos(cs.yaw);
+    const sx = Math.sin(cs.yaw);
+    camera.position.set(
+      cs.target.x + cs.dist * cy * sx,
+      cs.target.y + cs.dist * sy,
+      cs.target.z + cs.dist * cy * cx
+    );
+    camera.lookAt(cs.target);
+    if (Math.abs(cs.targetFov - cs.fov) > 0.02) {
+      cs.fov += (cs.targetFov - cs.fov) * 0.1;
+      camera.fov = cs.fov;
+      camera.updateProjectionMatrix();
+    }
+    const moving =
+      Math.abs(cs.targetYaw - cs.yaw) +
+        Math.abs(cs.targetPitch - cs.pitch) +
+        Math.abs(cs.targetDist - cs.dist) >
+      0.004;
+    return moving;
+  }
+  flyTo(target: V3, dist: number, dur: number, dive: boolean, tweens: TweenQueue) {
+    const cs = this.cam;
+    const fromT = cs.target.clone();
+    const toT = new THREE.Vector3(target.x, target.y, target.z);
+    const ctrl = fromT.clone().add(toT).multiplyScalar(0.5);
+    ctrl.y += fromT.distanceTo(toT) * (dive ? 0.5 : 0.24);
+    const fromD = cs.targetDist;
+    const fromFov = cs.targetFov;
+    const toFov = dive ? DIVE_FOV : BASE_FOV;
+    tweens.push({
+      t0: performance.now(),
+      delay: 0,
+      dur,
+      ease: easeInOutCubic,
+      apply: (k) => {
+        const a = 1 - k;
+        cs.target.set(
+          a * a * fromT.x + 2 * a * k * ctrl.x + k * k * toT.x,
+          a * a * fromT.y + 2 * a * k * ctrl.y + k * k * toT.y,
+          a * a * fromT.z + 2 * a * k * ctrl.z + k * k * toT.z
+        );
+        cs.targetDist = fromD + (dist - fromD) * k;
+        cs.targetFov = fromFov + (toFov - fromFov) * k;
+      },
+    });
+  }
+}
+
+/* ================= 力模拟（空间哈希加速） ================= */
+
+interface SimNode3D {
+  id: string;
+  pos: THREE.Vector3;
+  vel: THREE.Vector3;
+  fixed: boolean;
+  r: number;
+}
+
+const HASH_X = 73856093;
+const HASH_Y = 19349663;
+const HASH_Z = 83492791;
+
+function hashCell(cx: number, cy: number, cz: number): number {
+  return (cx * HASH_X) ^ (cy * HASH_Y) ^ (cz * HASH_Z);
+}
+
+/**
+ * 力模拟核心：斥力 + 弹簧 + 中心引力 + 积分阻尼 + 碰撞。
+ * 返回系统动能（速度平方和），供上层做收敛判定。
+ */
+function tickForces(
+  nodes: Map<string, SimNode3D>,
+  edges: { aId: string; bId: string; rest: number }[],
+  alpha: number,
+  inside: boolean,
+  dt: number
+): number {
+  const ns = [...nodes.values()];
+  if (ns.length === 0) return 0;
+  const k = inside ? Math.min(alpha, 0.04) : alpha;
+  const s = dt / 16.7;
+  const useHash = ns.length > BRUTE_FORCE_N;
+
+  /* ---- 斥力（空间哈希 / 暴力） ---- */
+  if (useHash) {
+    const cells = new Map<number, number[]>();
+    for (let i = 0; i < ns.length; i++) {
+      const n = ns[i];
+      const cx = Math.floor(n.pos.x / HASH_CELL);
+      const cy = Math.floor(n.pos.y / HASH_CELL);
+      const cz = Math.floor(n.pos.z / HASH_CELL);
+      const key = hashCell(cx, cy, cz);
+      let arr = cells.get(key);
+      if (!arr) {
+        arr = [];
+        cells.set(key, arr);
+      }
+      arr.push(i);
+    }
+    for (let i = 0; i < ns.length; i++) {
+      const a = ns[i];
+      const cx = Math.floor(a.pos.x / HASH_CELL);
+      const cy = Math.floor(a.pos.y / HASH_CELL);
+      const cz = Math.floor(a.pos.z / HASH_CELL);
+      for (let gx = cx - 1; gx <= cx + 1; gx++) {
+        for (let gy = cy - 1; gy <= cy + 1; gy++) {
+          for (let gz = cz - 1; gz <= cz + 1; gz++) {
+            const arr = cells.get(hashCell(gx, gy, gz));
+            if (!arr) continue;
+            for (const j of arr) {
+              if (j <= i) continue;
+              const b = ns[j];
+              const dx = b.pos.x - a.pos.x;
+              const dy = b.pos.y - a.pos.y;
+              const dz = b.pos.z - a.pos.z;
+              let d2 = dx * dx + dy * dy + dz * dz;
+              if (d2 < 1) {
+                const jx = ((i * 37 + j * 91) % 100) / 100 - 0.5;
+                const jz = ((i * 13 + j * 57) % 100) / 100 - 0.5;
+                b.pos.x += jx;
+                b.pos.z += jz;
+                d2 = 1;
+              }
+              const f = (-2600 * k) / (d2 + 120);
+              const d = Math.sqrt(d2);
+              const ux = dx / d;
+              const uy = dy / d;
+              const uz = dz / d;
+              const fa = f / (1 + a.r * 0.03);
+              const fb = f / (1 + b.r * 0.03);
+              a.vel.x += ux * fa * s;
+              a.vel.y += uy * fa * s;
+              a.vel.z += uz * fa * s;
+              b.vel.x -= ux * fb * s;
+              b.vel.y -= uy * fb * s;
+              b.vel.z -= uz * fb * s;
+            }
+          }
+        }
+      }
+    }
+  } else {
+    for (let i = 0; i < ns.length; i++) {
+      const a = ns[i];
+      for (let j = i + 1; j < ns.length; j++) {
+        const b = ns[j];
+        const dx = b.pos.x - a.pos.x;
+        const dy = b.pos.y - a.pos.y;
+        const dz = b.pos.z - a.pos.z;
+        let d2 = dx * dx + dy * dy + dz * dz;
+        if (d2 < 1) {
+          const jx = ((i * 37 + j * 91) % 100) / 100 - 0.5;
+          const jz = ((i * 13 + j * 57) % 100) / 100 - 0.5;
+          b.pos.x += jx;
+          b.pos.z += jz;
+          d2 = 1;
+        }
+        const f = (-2600 * k) / (d2 + 120);
+        const d = Math.sqrt(d2);
+        const ux = dx / d;
+        const uy = dy / d;
+        const uz = dz / d;
+        const fa = f / (1 + a.r * 0.03);
+        const fb = f / (1 + b.r * 0.03);
+        a.vel.x += ux * fa * s;
+        a.vel.y += uy * fa * s;
+        a.vel.z += uz * fa * s;
+        b.vel.x -= ux * fb * s;
+        b.vel.y -= uy * fb * s;
+        b.vel.z -= uz * fb * s;
+      }
+    }
+  }
+
+  /* ---- 弹簧 ---- */
+  for (const e of edges) {
+    const a = nodes.get(e.aId);
+    const b = nodes.get(e.bId);
+    if (!a || !b) continue;
+    const dx = b.pos.x - a.pos.x;
+    const dy = b.pos.y - a.pos.y;
+    const dz = b.pos.z - a.pos.z;
+    const d = Math.sqrt(dx * dx + dy * dy + dz * dz) || 1;
+    const f = 0.0075 * k * (d - e.rest);
+    const ux = dx / d;
+    const uy = dy / d;
+    const uz = dz / d;
+    a.vel.x += ux * f * s;
+    a.vel.y += uy * f * s;
+    a.vel.z += uz * f * s;
+    b.vel.x -= ux * f * s;
+    b.vel.y -= uy * f * s;
+    b.vel.z -= uz * f * s;
+  }
+
+  /* ---- 中心引力 ---- */
+  for (const n of ns) {
+    n.vel.x += -n.pos.x * 0.0018 * k * s;
+    n.vel.y += -n.pos.y * 0.0022 * k * s;
+    n.vel.z += -n.pos.z * 0.0018 * k * s;
+  }
+
+  /* ---- 积分 + 阻尼 ---- */
+  let energy = 0;
+  for (const n of ns) {
+    if (n.fixed) {
+      n.vel.set(0, 0, 0);
+      continue;
+    }
+    n.vel.multiplyScalar(0.85);
+    const sp = n.vel.length();
+    if (sp > 26) n.vel.multiplyScalar(26 / sp);
+    n.pos.addScaledVector(n.vel, s);
+    energy += n.vel.lengthSq();
+  }
+
+  /* ---- 碰撞（空间哈希 / 暴力） ---- */
+  if (useHash) {
+    const cells = new Map<number, number[]>();
+    for (let i = 0; i < ns.length; i++) {
+      const n = ns[i];
+      const cx = Math.floor(n.pos.x / HASH_CELL);
+      const cy = Math.floor(n.pos.y / HASH_CELL);
+      const cz = Math.floor(n.pos.z / HASH_CELL);
+      const key = hashCell(cx, cy, cz);
+      let arr = cells.get(key);
+      if (!arr) {
+        arr = [];
+        cells.set(key, arr);
+      }
+      arr.push(i);
+    }
+    for (let i = 0; i < ns.length; i++) {
+      const a = ns[i];
+      const cx = Math.floor(a.pos.x / HASH_CELL);
+      const cy = Math.floor(a.pos.y / HASH_CELL);
+      const cz = Math.floor(a.pos.z / HASH_CELL);
+      for (let gx = cx - 1; gx <= cx + 1; gx++) {
+        for (let gy = cy - 1; gy <= cy + 1; gy++) {
+          for (let gz = cz - 1; gz <= cz + 1; gz++) {
+            const arr = cells.get(hashCell(gx, gy, gz));
+            if (!arr) continue;
+            for (const j of arr) {
+              if (j <= i) continue;
+              const b = ns[j];
+              const dx = b.pos.x - a.pos.x;
+              const dy = b.pos.y - a.pos.y;
+              const dz = b.pos.z - a.pos.z;
+              const d = Math.sqrt(dx * dx + dy * dy + dz * dz);
+              const min = a.r + b.r + 8;
+              if (d < min && d > 0.001) {
+                const push = ((min - d) / d) * 0.5;
+                if (!a.fixed) a.pos.addScaledVector(new THREE.Vector3(dx, dy, dz), -push);
+                if (!b.fixed) b.pos.addScaledVector(new THREE.Vector3(dx, dy, dz), push);
+              }
+            }
+          }
+        }
+      }
+    }
+  } else {
+    for (let i = 0; i < ns.length; i++) {
+      const a = ns[i];
+      for (let j = i + 1; j < ns.length; j++) {
+        const b = ns[j];
+        const dx = b.pos.x - a.pos.x;
+        const dy = b.pos.y - a.pos.y;
+        const dz = b.pos.z - a.pos.z;
+        const d = Math.sqrt(dx * dx + dy * dy + dz * dz);
+        const min = a.r + b.r + 8;
+        if (d < min && d > 0.001) {
+          const push = ((min - d) / d) * 0.5;
+          if (!a.fixed) a.pos.addScaledVector(new THREE.Vector3(dx, dy, dz), -push);
+          if (!b.fixed) b.pos.addScaledVector(new THREE.Vector3(dx, dy, dz), push);
+        }
+      }
+    }
+  }
+
+  return energy;
+}
+
+/* ================= 渲染资源 ================= */
 
 function disposeObject(obj: THREE.Object3D) {
   obj.traverse((o) => {
@@ -148,13 +510,20 @@ function makeRingTexture(): THREE.CanvasTexture {
   return new THREE.CanvasTexture(c);
 }
 
-interface SimNode3D {
-  id: string;
-  pos: THREE.Vector3;
-  vel: THREE.Vector3;
-  fixed: boolean;
-  r: number;
+function makeNodeMat(color: number, emissive: number, intensity: number): THREE.MeshStandardMaterial {
+  return new THREE.MeshStandardMaterial({
+    color,
+    emissive,
+    emissiveIntensity: intensity,
+    metalness: 0.35,
+    roughness: 0.3,
+    transparent: true,
+    opacity: 1,
+    envMapIntensity: 0.5,
+  });
 }
+
+/* ================= 边视觉 ================= */
 
 interface EdgeVis {
   line: THREE.Line;
@@ -169,6 +538,8 @@ interface EdgeVis {
   base: number;
 }
 
+/* ================= 节点视觉 ================= */
+
 interface NodeVis {
   group: THREE.Group;
   mat: THREE.MeshStandardMaterial;
@@ -178,18 +549,22 @@ interface NodeVis {
   ringMat: THREE.SpriteMaterial;
 }
 
+/* ================= 引擎壳 ================= */
+
 export function createEngine(
   canvas: HTMLCanvasElement,
   stage: HTMLElement,
   deps: EngineDeps
 ): EngineApi {
+  /* ---------- 渲染器 ---------- */
   const renderer = new THREE.WebGLRenderer({
     canvas,
     antialias: true,
     alpha: false,
     powerPreference: "high-performance",
   });
-  renderer.setPixelRatio(Math.min(1.75, window.devicePixelRatio || 1));
+  const dpr = Math.min(1.5, window.devicePixelRatio || 1);
+  renderer.setPixelRatio(dpr);
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.05;
 
@@ -212,29 +587,14 @@ export function createEngine(
   const envScene = new RoomEnvironment();
   scene.environment = pmrem.fromScene(envScene, 0.04).texture;
 
-  /* ---------- 后期 ---------- */
+  /* ---------- 后期（分辨率自适应） ---------- */
   const composer = new EffectComposer(renderer);
-  composer.setPixelRatio(Math.min(1.75, window.devicePixelRatio || 1));
+  composer.setPixelRatio(dpr);
   composer.addPass(new RenderPass(scene, camera));
-  const bloom = new UnrealBloomPass(new THREE.Vector2(512, 512), 0.4, 0.6, 0.85);
+  const stageArea = stage.clientWidth * stage.clientHeight;
+  const bloomRes = stageArea < 700 * 600 ? 256 : 512;
+  const bloom = new UnrealBloomPass(new THREE.Vector2(bloomRes, bloomRes), 0.4, 0.6, 0.85);
   composer.addPass(bloom);
-
-  /* ---------- 材质 ---------- */
-  const statusColor = (s?: string) =>
-    s && STATUS_COLOR[s] !== undefined ? STATUS_COLOR[s] : 0x8e8e93;
-
-  const makeNodeMat = (color: number, emissive: number, intensity: number) =>
-    metal({
-      color,
-      emissive,
-      emissiveIntensity: intensity,
-      metalness: 0.35,
-      roughness: 0.3,
-      transparent: true,
-      opacity: 1,
-      envMapIntensity: 0.5,
-    });
-
 
   const glowTex = makeGlowTexture();
   const ringTex = makeRingTexture();
@@ -247,55 +607,30 @@ export function createEngine(
   const floorGroup = new THREE.Group();
   scene.add(floorGroup);
 
+  /* ---------- 状态 ---------- */
   const simNodes = new Map<string, SimNode3D>();
   const nodeVis = new Map<string, NodeVis>();
   const edges: EdgeVis[] = [];
   const extraOrbs: { mesh: THREE.Group; fromKey: string; kind: string; r: number }[] = [];
+  const tweens = new TweenQueue();
+  const rig = new CameraRig();
+  deps.camStateRef.current = rig.cam;
 
   let alpha = 0.9;
   let W = 0;
   let H = 0;
-  const tweens: Tween[] = [];
 
-  const camState: EngineCamState = {
-    yaw: -0.62,
-    pitch: 0.32,
-    dist: BASE_DIST * 1.6,
-    target: new THREE.Vector3(0, 10, 0),
-    targetYaw: -0.62,
-    targetPitch: 0.32,
-    targetDist: BASE_DIST,
-    fov: BASE_FOV,
-    targetFov: BASE_FOV,
-  };
-  deps.camStateRef.current = camState;
-
-  /* ---------- 相机 ---------- */
-  const applyCamera = () => {
-    const cs = camState;
-    const cy = Math.cos(cs.pitch);
-    const sy = Math.sin(cs.pitch);
-    const cx = Math.cos(cs.yaw);
-    const sx = Math.sin(cs.yaw);
-    camera.position.set(
-      cs.target.x + cs.dist * cy * sx,
-      cs.target.y + cs.dist * sy,
-      cs.target.z + cs.dist * cy * cx
-    );
-    camera.lookAt(cs.target);
-    if (Math.abs(cs.targetFov - cs.fov) > 0.02) {
-      cs.fov += (cs.targetFov - cs.fov) * 0.1;
-      camera.fov = cs.fov;
-      camera.updateProjectionMatrix();
-    }
-  };
+  const statusColor = (s?: string) =>
+    s && STATUS_COLOR[s] !== undefined ? STATUS_COLOR[s] : 0x8e8e93;
 
   /* ---------- 地面光池 ---------- */
-  const buildFloor = () => {
+  {
     const floor = new THREE.Mesh(
       new THREE.CircleGeometry(2400, 48),
-      metal({ color: 0x060910, roughness: 0.95, metalness: 0.25 })
+      makeNodeMat(0x060910, 0, 0)
     );
+    (floor.material as THREE.MeshStandardMaterial).roughness = 0.95;
+    (floor.material as THREE.MeshStandardMaterial).metalness = 0.25;
     floor.rotation.x = -Math.PI / 2;
     floor.position.y = -260;
     floorGroup.add(floor);
@@ -321,8 +656,7 @@ export function createEngine(
     glow.position.y = -258;
     glow.renderOrder = -1;
     floorGroup.add(glow);
-  };
-  buildFloor();
+  }
 
   /* ---------- 边 ---------- */
   const makeEdge = (
@@ -371,7 +705,7 @@ export function createEngine(
     group.add(sphere);
     const glowMat = new THREE.SpriteMaterial({
       map: glowTex,
-      color: color,
+      color,
       transparent: true,
       opacity: 0.85,
       blending: THREE.AdditiveBlending,
@@ -408,7 +742,6 @@ export function createEngine(
     const layout = deps.layoutRef.current;
     const store = deps.nodeStoreRef.current;
 
-    // 节点
     for (const n of sim.nodes) {
       const r =
         n.type === "method"
@@ -431,21 +764,29 @@ export function createEngine(
         r,
       });
       if (n.type === "method") {
-        makeNode(n.id, r, 0x4da3ff, 0x0a84ff, 0.5);
+        // 掌握度感知配色：<3 薄弱（暖橙）/ >=3 健康（蓝）/ 未设（灰蓝）
+        const lv = n.mastery;
+        const weak = lv != null && lv < 3;
+        const color = weak ? MASTERY_COLOR.weak : lv != null ? MASTERY_COLOR.ok : MASTERY_COLOR.none;
+        const emissive = weak ? 0xff9f0a : lv != null ? 0x0a84ff : 0x2c5a8c;
+        makeNode(n.id, r, color, emissive, weak ? 0.55 : 0.5);
       } else {
         const c = statusColor(n.status);
         makeNode(n.id, r, c, c, 0.45);
       }
     }
 
-    // 边
     const bendOf = (a: string, b: string) => {
       const h = a < b ? a + "|" + b : b + "|" + a;
       let hh = 0;
       for (let i = 0; i < h.length; i++) hh = (hh * 31 + h.charCodeAt(i)) | 0;
       const ang = ((hh % 628) / 628) * Math.PI * 2;
       const amt = 70 + (Math.abs(hh) % 60);
-      return new THREE.Vector3(Math.cos(ang) * amt, Math.sin(ang) * amt, (Math.abs(hh >> 3) % 40) - 20);
+      return new THREE.Vector3(
+        Math.cos(ang) * amt,
+        Math.sin(ang) * amt,
+        (Math.abs(hh >> 3) % 40) - 20
+      );
     };
     for (const l of sim.links) {
       const a = simNodes.get(l.s.id);
@@ -457,14 +798,37 @@ export function createEngine(
         const base = l.role === "core" ? 0.75 : l.role === "auxiliary" ? 0.5 : 0.34;
         makeEdge(l.s.id, l.t.id, "role", l.role, 150, color, base, dashed, false, new THREE.Vector3());
       } else if (l.kind === "comethod") {
-        makeEdge(l.s.id, l.t.id, "comethod", undefined, 250, 0x9b8cff, 0.42, false, true, bendOf(l.s.id, l.t.id));
+        makeEdge(
+          l.s.id,
+          l.t.id,
+          "comethod",
+          undefined,
+          250,
+          0x9b8cff,
+          0.42,
+          false,
+          true,
+          bendOf(l.s.id, l.t.id)
+        );
       } else {
-        makeEdge(l.s.id, l.t.id, "coproblem", undefined, 200, 0x5ecbe8, 0.36, false, true, bendOf(l.s.id, l.t.id));
+        makeEdge(
+          l.s.id,
+          l.t.id,
+          "coproblem",
+          undefined,
+          200,
+          0x5ecbe8,
+          0.36,
+          false,
+          true,
+          bendOf(l.s.id, l.t.id)
+        );
       }
     }
 
     alpha = 0.9;
     applyInside();
+    wake();
   };
 
   /* ---------- 内部结构 ---------- */
@@ -479,7 +843,6 @@ export function createEngine(
       const core = simNodes.get(inside);
       if (core && info) {
         core.fixed = true;
-        // 邻居环绕：从 nodeStore 目标缓动
         const nb = [...(deps.simRef.current.neighbors.get(inside) ?? new Set<string>())];
         nb.forEach((id, i) => {
           const n3 = simNodes.get(id);
@@ -496,15 +859,10 @@ export function createEngine(
             apply: (k) => n3.pos.lerpVectors(from, to, k),
           });
         });
-        // 步骤链 / 解法环
         deps.extraRef.current.forEach((e, idx) => {
           const group = new THREE.Group();
           const c = new THREE.Color(e.pal.base);
-          const mat = makeNodeMat(
-            (e.pal.base.startsWith("#") ? e.pal.base : "#" + e.pal.base) as unknown as number,
-            0,
-            0
-          );
+          const mat = makeNodeMat(0, 0, 0);
           mat.color.set(c);
           mat.emissive.set(c);
           mat.emissiveIntensity = e.kind === "step" ? 0.8 : 0.55;
@@ -540,7 +898,6 @@ export function createEngine(
       alpha = 0.75;
     }
 
-    // 透明度目标
     const xray = deps.insideRef.current?.xray ?? null;
     for (const [id, v] of nodeVis) {
       if (inside) {
@@ -552,46 +909,27 @@ export function createEngine(
       }
       void xray;
     }
+    wake();
   };
 
   /* ---------- 相机动作 ---------- */
   const flyTo = (target: V3, dist: number, dur: number, dive: boolean) => {
-    const cs = camState;
-    const fromT = cs.target.clone();
-    const toT = new THREE.Vector3(target.x, target.y, target.z);
-    const ctrl = fromT.clone().add(toT).multiplyScalar(0.5);
-    ctrl.y += fromT.distanceTo(toT) * (dive ? 0.5 : 0.24);
-    const fromD = cs.targetDist;
-    const fromFov = cs.targetFov;
-    const toFov = dive ? DIVE_FOV : BASE_FOV;
-    tweens.push({
-      t0: performance.now(),
-      delay: 0,
-      dur,
-      ease: easeInOutCubic,
-      apply: (k) => {
-        const a = 1 - k;
-        cs.target.set(
-          a * a * fromT.x + 2 * a * k * ctrl.x + k * k * toT.x,
-          a * a * fromT.y + 2 * a * k * ctrl.y + k * k * toT.y,
-          a * a * fromT.z + 2 * a * k * ctrl.z + k * k * toT.z
-        );
-        cs.targetDist = fromD + (dist - fromD) * k;
-        cs.targetFov = fromFov + (toFov - fromFov) * k;
-      },
-    });
+    rig.flyTo(target, dist, dur, dive, tweens);
+    wake();
   };
 
   const dragStage = (dx: number, dy: number) => {
-    const cs = camState;
+    const cs = rig.cam;
     cs.targetYaw -= dx * 0.005;
     cs.targetPitch = Math.min(1.25, Math.max(-1.25, cs.targetPitch + dy * 0.004));
     deps.lastInteractRef.current = performance.now();
+    wake();
   };
 
   const zoomBy = (factor: number) => {
-    camState.targetDist = Math.min(MAX_DIST, Math.max(MIN_DIST, camState.targetDist * factor));
+    rig.cam.targetDist = Math.min(MAX_DIST, Math.max(MIN_DIST, rig.cam.targetDist * factor));
     deps.lastInteractRef.current = performance.now();
+    wake();
   };
 
   const dragNode = (id: string, clientX: number, clientY: number) => {
@@ -615,6 +953,7 @@ export function createEngine(
         st.cur.z = point.z;
       }
       deps.lastInteractRef.current = performance.now();
+      wake();
     }
   };
 
@@ -638,134 +977,64 @@ export function createEngine(
   const relax = () => {
     for (const n of simNodes.values()) n.fixed = false;
     alpha = 0.9;
+    wake();
   };
 
-  /* ---------- 力导向 ---------- */
-  const tickForces = (dt: number) => {
-    const ns = [...simNodes.values()];
-    const k = deps.insideRef2.current ? Math.min(alpha, 0.04) : alpha;
-    const s = dt / 16.7;
-    // 斥力
-    for (let i = 0; i < ns.length; i++) {
-      const a = ns[i];
-      for (let j = i + 1; j < ns.length; j++) {
-        const b = ns[j];
-        const dx = b.pos.x - a.pos.x;
-        const dy = b.pos.y - a.pos.y;
-        const dz = b.pos.z - a.pos.z;
-        let d2 = dx * dx + dy * dy + dz * dz;
-        if (d2 < 1) {
-          const jx = ((i * 37 + j * 91) % 100) / 100 - 0.5;
-          const jz = ((i * 13 + j * 57) % 100) / 100 - 0.5;
-          b.pos.x += jx;
-          b.pos.z += jz;
-          d2 = 1;
-        }
-        const f = (-2600 * k) / (d2 + 120);
-        const d = Math.sqrt(d2);
-        const ux = dx / d;
-        const uy = dy / d;
-        const uz = dz / d;
-        const fa = f / (1 + a.r * 0.03);
-        const fb = f / (1 + b.r * 0.03);
-        a.vel.x += ux * fa * s;
-        a.vel.y += uy * fa * s;
-        a.vel.z += uz * fa * s;
-        b.vel.x -= ux * fb * s;
-        b.vel.y -= uy * fb * s;
-        b.vel.z -= uz * fb * s;
-      }
-    }
-    // 弹簧
-    for (const e of edges) {
-      const a = simNodes.get(e.aId);
-      const b = simNodes.get(e.bId);
-      if (!a || !b) continue;
-      const dx = b.pos.x - a.pos.x;
-      const dy = b.pos.y - a.pos.y;
-      const dz = b.pos.z - a.pos.z;
-      const d = Math.sqrt(dx * dx + dy * dy + dz * dz) || 1;
-      const f = 0.0075 * k * (d - e.rest);
-      const ux = dx / d;
-      const uy = dy / d;
-      const uz = dz / d;
-      a.vel.x += ux * f * s;
-      a.vel.y += uy * f * s;
-      a.vel.z += uz * f * s;
-      b.vel.x -= ux * f * s;
-      b.vel.y -= uy * f * s;
-      b.vel.z -= uz * f * s;
-    }
-    // 中心引力
-    for (const n of ns) {
-      n.vel.x += -n.pos.x * 0.0018 * k * s;
-      n.vel.y += -n.pos.y * 0.0022 * k * s;
-      n.vel.z += -n.pos.z * 0.0018 * k * s;
-    }
-    // 积分 + 阻尼
-    for (const n of ns) {
-      if (n.fixed) {
-        n.vel.set(0, 0, 0);
-        continue;
-      }
-      n.vel.multiplyScalar(0.85);
-      const sp = n.vel.length();
-      if (sp > 26) n.vel.multiplyScalar(26 / sp);
-      n.pos.addScaledVector(n.vel, s);
-    }
-    // 碰撞
-    for (let i = 0; i < ns.length; i++) {
-      const a = ns[i];
-      for (let j = i + 1; j < ns.length; j++) {
-        const b = ns[j];
-        const dx = b.pos.x - a.pos.x;
-        const dy = b.pos.y - a.pos.y;
-        const dz = b.pos.z - a.pos.z;
-        const d = Math.sqrt(dx * dx + dy * dy + dz * dz);
-        const min = a.r + b.r + 8;
-        if (d < min && d > 0.001) {
-          const push = ((min - d) / d) * 0.5;
-          if (!a.fixed) a.pos.addScaledVector(new THREE.Vector3(dx, dy, dz), -push);
-          if (!b.fixed) b.pos.addScaledVector(new THREE.Vector3(dx, dy, dz), push);
-        }
-      }
-    }
-    alpha *= Math.pow(0.993, dt / 16.7);
-    if (alpha < 0.02) alpha = 0.02;
-  };
-
-  /* ---------- 主循环 ---------- */
+  /* ---------- 主循环（收敛冻结 + 按需渲染） ---------- */
   let raf = 0;
+  let running = false;
   let lastNow = 0;
 
-  const loop = (now: number) => {
-    const dt = Math.min(50, now - (lastNow || now));
-    lastNow = now;
+  /* 休眠监听：React 状态（选中/悬停/高亮/内部）经 ref 传入引擎，
+     引擎休眠后靠轻量轮询比对快照，发现变化立即唤醒 */
+  let sleepTimer = 0;
+  let snap = { sel: "", hov: "", hlSize: 0, mtSize: 0, inside: "" };
+  const takeSnap = () => ({
+    sel: deps.selectedRef.current ?? "",
+    hov: deps.hoveredRef.current ?? "",
+    hlSize: deps.highlightRef.current?.size ?? 0,
+    mtSize: deps.matchedRef.current?.size ?? 0,
+    inside: deps.insideRef2.current ?? "",
+  });
+  const snapChanged = () => {
+    const s = takeSnap();
+    return (
+      s.sel !== snap.sel ||
+      s.hov !== snap.hov ||
+      s.hlSize !== snap.hlSize ||
+      s.mtSize !== snap.mtSize ||
+      s.inside !== snap.inside
+    );
+  };
 
-    // 补间
-    for (let i = tweens.length - 1; i >= 0; i--) {
-      const tw = tweens[i];
-      if (now - tw.t0 < tw.delay) continue;
-      const k = clamp01((now - tw.t0 - tw.delay) / Math.max(1, tw.dur));
-      tw.apply(tw.ease(k));
-      if (k >= 1) tweens.splice(i, 1);
+  const syncHitLayer = () => {
+    const v3 = new THREE.Vector3();
+    for (const [id, n3] of simNodes) {
+      const el = deps.hitElRef.current.get(id);
+      if (!el) continue;
+      v3.copy(n3.pos);
+      v3.project(camera);
+      if (v3.z > 1 || v3.z < -1) {
+        el.style.display = "none";
+        continue;
+      }
+      el.style.display = "";
+      const sx = (v3.x * 0.5 + 0.5) * W;
+      const sy = (-v3.y * 0.5 + 0.5) * H;
+      const distCam = camera.position.distanceTo(n3.pos);
+      const f = H / 2 / Math.tan((camera.fov * Math.PI) / 360);
+      const size = Math.max(38, n3.r * 2 * (f / distCam) + 18);
+      el.style.transform =
+        "translate3d(" + (sx - size / 2) + "px," + (sy - size / 2) + "px,0)";
+      el.style.width = size + "px";
+      el.style.height = size + "px";
+      el.style.zIndex = String(Math.max(1, Math.min(5, Math.round(3000 - distCam))));
     }
+  };
 
-    // 相机
-    const cs = camState;
-    cs.yaw += (cs.targetYaw - cs.yaw) * 0.085;
-    cs.pitch += (cs.targetPitch - cs.pitch) * 0.085;
-    cs.dist += (cs.targetDist - cs.dist) * 0.08;
-    const reduce = !!deps.reduceRef.current;
-    if (!reduce && !deps.insideRef2.current && now - deps.lastInteractRef.current > 4500) {
-      cs.targetYaw += 0.0003 * (dt / 16.7);
-    }
-    applyCamera();
-
-    // 力导向
-    tickForces(dt);
-
-    // 节点显示同步
+  /** 渲染一帧；返回材质缓动是否仍在进行（用于休眠判定，避免高亮动画被截断） */
+  const renderFrame = (): boolean => {
+    let matAnimating = false;
     const sel = deps.selectedRef.current;
     const hov = deps.hoveredRef.current;
     for (const [id, n3] of simNodes) {
@@ -773,16 +1042,21 @@ export function createEngine(
       if (!v) continue;
       v.group.position.copy(n3.pos);
       const hot = sel === id || hov === id;
-      v.mat.emissiveIntensity += ((hot ? 1.1 : 0.5) - v.mat.emissiveIntensity) * 0.12;
-      v.glowMat.opacity += ((hot ? 1 : 0.85) - v.glowMat.opacity) * 0.12;
-      v.ringMat.opacity += ((sel === id ? 0.95 : 0) - v.ringMat.opacity) * 0.14;
+      const de = (hot ? 1.1 : 0.5) - v.mat.emissiveIntensity;
+      if (Math.abs(de) > 0.02) matAnimating = true;
+      v.mat.emissiveIntensity += de * 0.12;
+      const dg = (hot ? 1 : 0.85) - v.glowMat.opacity;
+      if (Math.abs(dg) > 0.02) matAnimating = true;
+      v.glowMat.opacity += dg * 0.12;
+      const dr = (sel === id ? 0.95 : 0) - v.ringMat.opacity;
+      if (Math.abs(dr) > 0.02) matAnimating = true;
+      v.ringMat.opacity += dr * 0.14;
     }
 
-    // 边同步
     const hl = deps.highlightRef.current;
     const mt = deps.matchedRef.current;
     const posAttr = (e: EdgeVis) =>
-      (e.line.geometry.getAttribute("position") as THREE.BufferAttribute);
+      e.line.geometry.getAttribute("position") as THREE.BufferAttribute;
     for (const e of edges) {
       const a = simNodes.get(e.aId);
       const b = simNodes.get(e.bId);
@@ -814,48 +1088,93 @@ export function createEngine(
       if ((e.mat as THREE.LineDashedMaterial).isLineDashedMaterial) {
         e.line.computeLineDistances();
       }
-      // 高亮淡化
       const active = sel != null && (e.aId === sel || e.bId === sel);
       let target = e.base;
       if (hl) target = active ? 1 : 0.05;
       if (mt) target = mt.has(e.aId) && mt.has(e.bId) ? 1 : 0.04;
-      e.mat.opacity += (target - e.mat.opacity) * 0.1;
+      const dop = target - e.mat.opacity;
+      if (Math.abs(dop) > 0.02) matAnimating = true;
+      e.mat.opacity += dop * 0.1;
     }
 
     composer.render();
+    return matAnimating;
+  };
 
-    // 命中层同步
-    const v3 = new THREE.Vector3();
-    for (const [id, n3] of simNodes) {
-      const el = deps.hitElRef.current.get(id);
-      if (!el) continue;
-      v3.copy(n3.pos);
-      v3.project(camera);
-      if (v3.z > 1 || v3.z < -1) {
-        el.style.display = "none";
-        continue;
-      }
-      el.style.display = "";
-      const sx = (v3.x * 0.5 + 0.5) * W;
-      const sy = (-v3.y * 0.5 + 0.5) * H;
-      const distCam = camera.position.distanceTo(n3.pos);
-      const f = H / 2 / Math.tan((camera.fov * Math.PI) / 360);
-      const size = Math.max(38, n3.r * 2 * (f / distCam) + 18);
-      el.style.transform =
-        "translate3d(" + (sx - size / 2) + "px," + (sy - size / 2) + "px,0)";
-      el.style.width = size + "px";
-      el.style.height = size + "px";
-      el.style.zIndex = String(Math.max(1, Math.min(5, Math.round(3000 - distCam))));
+  const loop = (now: number) => {
+    const dt = Math.min(50, now - (lastNow || now));
+    lastNow = now;
+
+    // 补间
+    const hasTween = tweens.tick(now);
+
+    // 相机
+    const camMoving = rig.step(camera);
+    const reduce = !!deps.reduceRef.current;
+    const idleMs = now - deps.lastInteractRef.current;
+    const autoOrbit =
+      !reduce && !deps.insideRef2.current && idleMs > 4500 && idleMs < 4500 + ORBIT_DURATION;
+    if (autoOrbit) {
+      rig.cam.targetYaw += 0.0003 * (dt / 16.7);
     }
 
-    const pct = Math.round((BASE_DIST / cs.targetDist) * 100);
+    // 力导向（返回动能），alpha 冷却由引擎壳持有
+    const energy = tickForces(simNodes, edges, alpha, !!deps.insideRef2.current, dt);
+    alpha *= Math.pow(0.993, dt / 16.7);
+    if (alpha < 0.02) alpha = 0.02;
+
+    // 渲染一帧（返回材质动画是否进行中）
+    const matAnimating = renderFrame();
+    syncHitLayer();
+
+    const pct = Math.round((BASE_DIST / rig.cam.targetDist) * 100);
     if (deps.zoomReadoutRef.current) {
       deps.zoomReadoutRef.current.textContent = pct + "%";
     }
-    deps.setZoomedIn(cs.targetDist < 1000);
+    deps.setZoomedIn(rig.cam.targetDist < 1000);
 
+    // 收敛冻结：无补间、材质缓动完成、力已收敛、相机静止
+    // （dist 差值 < 3px 视为静止，容忍启动推近动画尾段）、且无自动环绕 → 挂起循环
+    const ddist = Math.abs(rig.cam.targetDist - rig.cam.dist);
+    const still =
+      !hasTween &&
+      !matAnimating &&
+      energy < ENERGY_STILL &&
+      alpha <= ALPHA_STILL &&
+      (!camMoving || ddist < 3);
+    if (still && !autoOrbit) {
+      running = false;
+      snap = takeSnap();
+      sleepTimer = window.setInterval(() => {
+        if (snapChanged()) wake();
+      }, 400);
+      return; // 不请求下一帧，停在当前画面
+    }
     raf = requestAnimationFrame(loop);
   };
+
+  const wake = () => {
+    if (running) return;
+    running = true;
+    if (sleepTimer) {
+      window.clearInterval(sleepTimer);
+      sleepTimer = 0;
+    }
+    lastNow = 0;
+    raf = requestAnimationFrame(loop);
+  };
+
+  const onVisibility = () => {
+    if (document.hidden) {
+      if (running) {
+        running = false;
+        cancelAnimationFrame(raf);
+      }
+    } else {
+      wake();
+    }
+  };
+  document.addEventListener("visibilitychange", onVisibility);
 
   /* ---------- 尺寸 ---------- */
   const resize = () => {
@@ -866,12 +1185,13 @@ export function createEngine(
     camera.updateProjectionMatrix();
     renderer.setSize(W, H, false);
     composer.setSize(W, H);
+    wake();
   };
   resize();
   const ro = new ResizeObserver(resize);
   ro.observe(stage);
 
-  raf = requestAnimationFrame(loop);
+  wake();
 
   return {
     rebuild,
@@ -884,7 +1204,15 @@ export function createEngine(
     getBounds,
     relax,
     dispose: () => {
-      cancelAnimationFrame(raf);
+      if (running) {
+        running = false;
+        cancelAnimationFrame(raf);
+      }
+      if (sleepTimer) {
+        window.clearInterval(sleepTimer);
+        sleepTimer = 0;
+      }
+      document.removeEventListener("visibilitychange", onVisibility);
       ro.disconnect();
       clearGroup(graphGroup);
       clearGroup(extraGroup);

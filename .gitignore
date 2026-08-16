@@ -1,11 +1,16 @@
+# Dependencies & build output
 node_modules
 dist
+
+# OS & editor noise
 .DS_Store
 *.local
+*.log
+
+# Screenshots from automated visual checks
 scripts/shots
 
-# 运行时数据与本地产物
+# Runtime data & local artifacts (never publish)
 data/
 work/
 .serve.pid
-*.log

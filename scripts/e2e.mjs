@@ -58,6 +58,15 @@ async function clickSave(label) {
   await clickByText(".sheet-footer .btn", label);
 }
 
+// 等待题目卡片出现：视图切换时方法卡片仍在退出动画中，`.card` 会误匹配到
+// 方法卡片，故先等 `.method-card` 全部消失，再等题目卡片。
+async function waitForLibCard() {
+  await page.waitForFunction(() => !document.querySelector(".method-card"), {
+    timeout: 15000,
+  });
+  await page.waitForSelector(".grid .card", { timeout: 15000 });
+}
+
 // 准备一张测试图片
 const png = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
@@ -70,6 +79,28 @@ await writeFile(imgPath, png);
 
 await page.goto(base, { waitUntil: "networkidle0" });
 await page.waitForSelector(".card", { timeout: 8000 });
+// 无条件清空并刷新，保证每次从种子状态开始（上次中断或未清桥的残留
+// 数据可能让题目数恰好为 3 而只残留方法，故不能依赖卡片数判断）
+await page.evaluate(() => {
+  Array.from(document.querySelectorAll(".sidebar button"))
+    .find((b) => b.textContent.includes("备份与恢复"))
+    ?.click();
+});
+await page.waitForSelector(".backup-sheet");
+await clickByText(".backup-sheet .btn-danger", "清空全部题目与方法");
+await page.waitForSelector(".dialog-card");
+await clickByText(".dialog-actions .btn", "清空全部");
+await page.waitForFunction(
+  () =>
+    Array.from(document.querySelectorAll(".backup-msg.ok")).some((el) =>
+      el.textContent.includes("已清空")
+    ),
+  { timeout: 15000 }
+);
+// 清除播种标志，让刷新后重新生成 3 道种子题
+await page.evaluate(() => localStorage.removeItem("mb-seeded"));
+await page.reload({ waitUntil: "networkidle0" });
+await page.waitForSelector(".card", { timeout: 10000 });
 check("初始 3 道种子题", (await page.$$(".card")).length === 3);
 
 // ---- 新增题目 ----
@@ -237,7 +268,7 @@ await sleep(600);
 
 // T2 题目详情：用到的方法区块
 await clickByText(".nav-item", "题库", false);
-await page.waitForSelector(".card");
+await waitForLibCard();
 await page.click(".card");
 await page.waitForSelector(".sheet .detail-img");
 check("T2 题目详情显示用到的方法", await selVisible(".sheet .method-links"));
@@ -413,7 +444,7 @@ await sleep(300);
 await page.type("#pf-title", "多标签测试题");
 await clickSave("保存题目");
 await clickByText(".nav-item", "题库", false);
-await page.waitForSelector(".card");
+await waitForLibCard();
 await page.waitForFunction(() =>
   Array.from(document.querySelectorAll(".card")).some((c) => c.textContent.includes("多标签测试题"))
 );
@@ -476,7 +507,7 @@ await sleep(300);
 await page.type("#pf-title", "破题步骤测试题");
 await clickSave("保存题目");
 await clickByText(".nav-item", "题库", false);
-await page.waitForSelector(".card");
+await waitForLibCard();
 await page.waitForFunction(() =>
   Array.from(document.querySelectorAll(".card")).some((c) => c.textContent.includes("破题步骤测试题"))
 );
@@ -610,7 +641,7 @@ await sleep(600);
 
 // T6 题目详情有导出图片按钮
 await clickByText(".nav-item", "题库", false);
-await page.waitForSelector(".card");
+await waitForLibCard();
 await page.click(".card");
 await page.waitForSelector(".sheet");
 check("T6 题目详情有导出图片按钮", await selVisible(".export-images-btn"));
@@ -735,7 +766,7 @@ await page.waitForFunction(() => {
 });
 check("T22 删除方法成功", true);
 await clickByText(".nav-item", "题库", false);
-await page.waitForSelector(".card");
+await waitForLibCard();
 await page.evaluate(() => {
   const card = Array.from(document.querySelectorAll(".card")).find((c) =>
     c.textContent.includes("对称式的值")
@@ -753,7 +784,7 @@ await sleep(500);
 
 // T23 破题思路独立搜索池：只搜思路文字，结果按标签分组
 await clickByText(".nav-item", "题库", false);
-await page.waitForSelector(".card");
+await waitForLibCard();
 await clickByText(".segmented button", "破题思路");
 await page.type(".search input", "等比");
 await sleep(600);
@@ -803,7 +834,7 @@ await page.evaluate(() => {
   el?.select();
 });
 await page.keyboard.press("Backspace");
-await page.waitForSelector(".card");
+await waitForLibCard();
 await page.waitForFunction(() =>
   Array.from(document.querySelectorAll(".card")).some((c) => c.textContent.includes("多解法测试题"))
 );
@@ -884,7 +915,7 @@ await sleep(500);
 
 // T36 解法剧场：步骤逐条播放、多解法切换
 await clickByText(".nav-item", "题库", false);
-await page.waitForSelector(".card");
+await waitForLibCard();
 await page.evaluate(() => {
   Array.from(document.querySelectorAll(".card"))
     .find((c) => c.textContent.includes("多解法测试题"))
@@ -1061,7 +1092,7 @@ check("T34 电脑端不弹其他设备同步提醒", t34Banner === 0, `banners=$
 
 // T32 按解法个数筛选
 await clickByText(".nav-item", "题库", false);
-await page.waitForSelector(".card");
+await waitForLibCard();
 await page.select('select[aria-label="按解法数筛选"]', "2");
 await page.waitForFunction(() => document.querySelectorAll(".card").length === 1, { timeout: 5000 });
 const t32Cards = await page.$$eval(".card .card-title", (els) => els.map((e) => e.textContent ?? ""));
@@ -1126,7 +1157,7 @@ check(
 
 // T38 认知回看：难题进入排期，降档毕业
 await clickByText(".nav-item", "题库", false);
-await page.waitForSelector(".card");
+await waitForLibCard();
 await page.evaluate(() => {
   Array.from(document.querySelectorAll(".card"))
     .find((c) => c.textContent.includes("多解法测试题"))

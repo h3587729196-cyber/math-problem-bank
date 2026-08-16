@@ -3,7 +3,24 @@
   "private": true,
   "version": "1.0.0",
   "type": "module",
-  "description": "难题库 —— 以图片保存数学难题与解题思路",
+  "description": "难题库 —— 以图片保存数学难题与解题思路的本地数学题库",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/h3587729196-cyber/math-problem-bank.git"
+  },
+  "homepage": "https://github.com/h3587729196-cyber/math-problem-bank",
+  "keywords": [
+    "math",
+    "spaced-repetition",
+    "fsrs",
+    "knowledge-graph",
+    "indexeddb",
+    "local-first",
+    "react",
+    "typescript",
+    "vite"
+  ],
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",

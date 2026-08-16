@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import type { Method, Problem } from "../types";
 import { MASTERY_LABEL } from "../types";
 import { formatDate } from "../utils/format";
 import { useBlobUrl } from "../hooks/useBlobUrl";
+import { AnimatedCard } from "./ui/AnimatedCard";
 import { Empty } from "./ui/Empty";
 import { Bulb, Pencil, Plus, Search } from "./ui/icons";
 
@@ -42,25 +43,7 @@ function MethodCard({
   onEdit: () => void;
 }) {
   return (
-    <motion.div
-      layout
-      className="card method-card"
-      role="button"
-      tabIndex={0}
-      initial={{ opacity: 0, scale: 0.97, y: 8 }}
-      animate={{ opacity: 1, scale: 1, y: 0 }}
-      exit={{ opacity: 0, scale: 0.97 }}
-      transition={{ type: "spring", bounce: 0.18, duration: 0.45 }}
-      whileHover={{ y: -3 }}
-      whileTap={{ scale: 0.985 }}
-      onClick={onOpen}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          onOpen();
-        }
-      }}
-    >
+    <AnimatedCard className="card method-card" onOpen={onOpen} tapScale={0.985}>
       {method.images.length > 0 && (
         <div className="method-thumb">
           <CardThumb blob={method.images[0].blob} />
@@ -117,17 +100,18 @@ function MethodCard({
         </span>
         <span className="muted">{formatDate(method.updatedAt)}</span>
       </div>
-    </motion.div>
+    </AnimatedCard>
   );
 }
 
 export function MethodLibrary({ methods, problems, onOpen, onEdit, onAdd }: MethodLibraryProps) {
   const [query, setQuery] = useState("");
+  const deferredQuery = useDeferredValue(query);
   const [visible, setVisible] = useState(PAGE_SIZE);
 
   useEffect(() => {
     setVisible(PAGE_SIZE);
-  }, [query]);
+  }, [deferredQuery]);
 
   const relatedMap = useMemo(() => {
     const map = new Map<string, Problem[]>();
@@ -142,7 +126,7 @@ export function MethodLibrary({ methods, problems, onOpen, onEdit, onAdd }: Meth
   }, [methods, problems]);
 
   const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
+    const q = deferredQuery.trim().toLowerCase();
     if (!q) return methods;
     return methods.filter((m) =>
       [m.name, m.signal, m.description, ...m.tags, ...(m.steps ?? []), m.pitfalls ?? "", ...(m.images ?? []).map((i) => i.caption)]
@@ -150,7 +134,7 @@ export function MethodLibrary({ methods, problems, onOpen, onEdit, onAdd }: Meth
         .toLowerCase()
         .includes(q)
     );
-  }, [methods, query]);
+  }, [methods, deferredQuery]);
 
   const shown = filtered.slice(0, visible);
 

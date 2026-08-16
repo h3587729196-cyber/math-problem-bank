@@ -97,6 +97,13 @@ export function Sidebar({
               onClick={() => onView(item.id)}
               aria-current={active ? "page" : undefined}
             >
+              {active && (
+                <motion.span
+                  className="nav-pill"
+                  layoutId="sidebar-pill"
+                  transition={{ type: "spring", bounce: 0.22, duration: 0.55 }}
+                />
+              )}
               <Icon size={19} />
               <span className="nav-label">{item.label}</span>
               {item.count !== undefined && <span className="count">{item.count}</span>}

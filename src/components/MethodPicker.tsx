@@ -83,6 +83,7 @@ export function MethodPicker({
         onClick={() => {
           setOpen((v) => !v);
           setCreating(false);
+          setQuery("");
         }}
       >
         <Search size={15} />

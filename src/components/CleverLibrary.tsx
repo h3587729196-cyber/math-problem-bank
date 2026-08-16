@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
-import { motion } from "motion/react";
+import { AnimatePresence } from "motion/react";
 import type { Problem, ProblemDraft, ThoughtStep } from "../types";
 import { CLEVERNESS_LABEL } from "../types";
 import { formatDate } from "../utils/format";
+import { AnimatedCard } from "./ui/AnimatedCard";
 import { ConfirmDialog } from "./ui/ConfirmDialog";
 import { Empty } from "./ui/Empty";
 import { Search, Star, Trash } from "./ui/icons";
@@ -24,6 +25,79 @@ interface CleverLibraryProps {
 type Sort = "level-desc" | "level-asc" | "recent";
 
 const PAGE_SIZE = 24;
+
+function CleverCard({
+  e,
+  onOpen,
+  onLevel,
+  onUnstar,
+  onDelete,
+}: {
+  e: CleverEntry;
+  onOpen: () => void;
+  onLevel: (level: ThoughtStep["cleverness"]) => void;
+  onUnstar: () => void;
+  onDelete: () => void;
+}) {
+  return (
+    <AnimatedCard className="clever-card" onOpen={onOpen} hoverY={-3}>
+      <div className="clever-head">
+        <span className={`clever-level lv${e.step.cleverness}`}>
+          <Star size={12} />
+          {CLEVERNESS_LABEL[e.step.cleverness]}
+        </span>
+        <div className="clever-actions" onClick={(ev) => ev.stopPropagation()}>
+          <select
+            className="clever-level-select"
+            value={e.step.cleverness}
+            aria-label="调整巧妙程度"
+            title="调整巧妙程度"
+            onClick={(ev) => ev.stopPropagation()}
+            onChange={(ev) => onLevel(Number(ev.target.value) as ThoughtStep["cleverness"])}
+          >
+            {([1, 2, 3, 4, 5] as const).map((n) => (
+              <option key={n} value={n}>
+                {n} · {CLEVERNESS_LABEL[n]}
+              </option>
+            ))}
+          </select>
+          <button
+            className="icon-btn clever-action"
+            aria-label="取消收藏"
+            title="取消收藏"
+            onClick={onUnstar}
+          >
+            <Star size={14} />
+          </button>
+          <button
+            className="icon-btn clever-action danger"
+            aria-label="删除这条巧思"
+            title="删除这条巧思"
+            onClick={onDelete}
+          >
+            <Trash size={14} />
+          </button>
+        </div>
+      </div>
+      <div className="clever-text">{e.step.text}</div>
+      <div className="clever-source">
+        {e.solutionLabel} · 来源：{e.problem.title}
+      </div>
+      {e.problem.tags.length > 0 && (
+        <div className="card-tags">
+          {e.problem.tags.slice(0, 3).map((t) => (
+            <span key={t} className="chip">
+              {t}
+            </span>
+          ))}
+        </div>
+      )}
+      <div className="clever-foot">
+        <span className="muted">{formatDate(e.problem.updatedAt)}</span>
+      </div>
+    </AnimatedCard>
+  );
+}
 
 export function CleverLibrary({ problems, onOpenProblem, onUpdateProblem }: CleverLibraryProps) {
   const [query, setQuery] = useState("");
@@ -168,91 +242,24 @@ export function CleverLibrary({ problems, onOpenProblem, onUpdateProblem }: Clev
       ) : (
         <>
           <div className="clever-grid">
-            {shown.map((e) => (
-              <motion.div
-                key={e.key}
-                layout
-                className="clever-card"
-                role="button"
-                tabIndex={0}
-                initial={{ opacity: 0, scale: 0.97, y: 8 }}
-                animate={{ opacity: 1, scale: 1, y: 0 }}
-                exit={{ opacity: 0, scale: 0.97 }}
-                transition={{ type: "spring", bounce: 0.18, duration: 0.45 }}
-                whileHover={{ y: -3 }}
-                whileTap={{ scale: 0.98 }}
-                onClick={() => onOpenProblem(e.problem.id)}
-                onKeyDown={(ev) => {
-                  if (ev.key === "Enter" || ev.key === " ") {
-                    ev.preventDefault();
-                    onOpenProblem(e.problem.id);
+            <AnimatePresence mode="popLayout">
+              {shown.map((e) => (
+                <CleverCard
+                  key={e.key}
+                  e={e}
+                  onOpen={() => onOpenProblem(e.problem.id)}
+                  onLevel={(lv) => setCleverness(e, lv)}
+                  onUnstar={() => unstar(e)}
+                  onDelete={() =>
+                    setPendingDelete({
+                      problemId: e.problem.id,
+                      stepId: e.step.id,
+                      text: e.step.text,
+                    })
                   }
-                }}
-              >
-                <div className="clever-head">
-                  <span className={`clever-level lv${e.step.cleverness}`}>
-                    <Star size={12} />
-                    {CLEVERNESS_LABEL[e.step.cleverness]}
-                  </span>
-                  <div className="clever-actions" onClick={(ev) => ev.stopPropagation()}>
-                    <select
-                      className="clever-level-select"
-                      value={e.step.cleverness}
-                      aria-label="调整巧妙程度"
-                      title="调整巧妙程度"
-                      onClick={(ev) => ev.stopPropagation()}
-                      onChange={(ev) =>
-                        setCleverness(e, Number(ev.target.value) as ThoughtStep["cleverness"])
-                      }
-                    >
-                      {([1, 2, 3, 4, 5] as const).map((n) => (
-                        <option key={n} value={n}>
-                          {n} · {CLEVERNESS_LABEL[n]}
-                        </option>
-                      ))}
-                    </select>
-                    <button
-                      className="icon-btn clever-action"
-                      aria-label="取消收藏"
-                      title="取消收藏"
-                      onClick={() => unstar(e)}
-                    >
-                      <Star size={14} />
-                    </button>
-                    <button
-                      className="icon-btn clever-action danger"
-                      aria-label="删除这条巧思"
-                      title="删除这条巧思"
-                      onClick={() =>
-                        setPendingDelete({
-                          problemId: e.problem.id,
-                          stepId: e.step.id,
-                          text: e.step.text,
-                        })
-                      }
-                    >
-                      <Trash size={14} />
-                    </button>
-                  </div>
-                </div>
-                <div className="clever-text">{e.step.text}</div>
-                <div className="clever-source">
-                  {e.solutionLabel} · 来源：{e.problem.title}
-                </div>
-                {e.problem.tags.length > 0 && (
-                  <div className="card-tags">
-                    {e.problem.tags.slice(0, 3).map((t) => (
-                      <span key={t} className="chip">
-                        {t}
-                      </span>
-                    ))}
-                  </div>
-                )}
-                <div className="clever-foot">
-                  <span className="muted">{formatDate(e.problem.updatedAt)}</span>
-                </div>
-              </motion.div>
-            ))}
+                />
+              ))}
+            </AnimatePresence>
           </div>
           {entries.length > visible && (
             <div className="load-more-wrap">

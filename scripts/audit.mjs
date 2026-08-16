@@ -62,11 +62,18 @@ const audit = await page.evaluate(async () => {
 
   // 卡片数量与网格
   const cards = document.querySelectorAll(".card").length;
-  check("题库卡片为 3", cards === 3, `${cards} cards`);
+  check("题库卡片渲染（≥3）", cards >= 3, `${cards} cards`);
 
   // 分段控件活动胶囊
   const pill = document.querySelector(".seg-pill");
   check("分段控件胶囊渲染", !!pill && pill.getBoundingClientRect().width > 0);
+
+  // 侧栏活动胶囊（弹簧滑动）
+  check(
+    "侧栏活动胶囊渲染",
+    !!document.querySelector(".nav-item.active .nav-pill"),
+    "nav-pill present"
+  );
 
   // 标题字距（display 负 tracking）
   const title = document.querySelector(".page-title");
@@ -76,14 +83,19 @@ const audit = await page.evaluate(async () => {
     title ? getComputedStyle(title).letterSpacing : "no title"
   );
 
-  // 深色模式切换
+  // 深色模式切换（主题按钮仍可用；先强制浅色再切深色，与系统初始主题无关）
   const html = document.documentElement;
-  const bgBefore = getComputedStyle(document.body).backgroundColor;
+  html.dataset.theme = "light";
+  await new Promise((r) => setTimeout(r, 60));
+  const bgLight = getComputedStyle(document.body).backgroundColor;
   html.dataset.theme = "dark";
   await new Promise((r) => setTimeout(r, 60));
   const bgDark = getComputedStyle(document.body).backgroundColor;
   delete html.dataset.theme;
-  check("深色模式背景切换", bgBefore !== bgDark, `${bgBefore} -> ${bgDark}`);
+  check("深色模式背景切换", bgLight !== bgDark, `${bgLight} -> ${bgDark}`);
+
+  // 粒子背景画布常驻
+  check("粒子背景画布存在", !!document.querySelector(".particle-bg"), "particle-bg present");
 
   return { results, brokenUrls: broken.map((i) => i.currentSrc) };
 });
@@ -118,7 +130,8 @@ const detail = await page.evaluate(() => {
   return out;
 });
 await page.keyboard.press("Escape");
-await sleep(500);
+await page.waitForFunction(() => !document.querySelector(".sheet"), { timeout: 10000 });
+await sleep(300);
 
 // 录入表单
 await page.click(".btn-primary");
@@ -151,8 +164,8 @@ const methods = await page.evaluate(() => {
   const cards = document.querySelectorAll(".method-card").length;
   const signals = document.querySelectorAll(".signal").length;
   return [
-    { name: "方法卡片渲染", ok: cards === 3, detail: `${cards} cards` },
-    { name: "适用信号渲染", ok: signals === 3, detail: `${signals} signals` },
+    { name: "方法卡片渲染", ok: cards >= 3, detail: `${cards} cards` },
+    { name: "适用信号渲染", ok: signals >= 3, detail: `${signals} signals` },
   ];
 });
 
@@ -202,8 +215,40 @@ const mobile = await page.evaluate(() => {
     },
     {
       name: "移动端卡片渲染",
-      ok: document.querySelectorAll(".card").length === 3,
+      ok: document.querySelectorAll(".card").length >= 3,
       detail: `${document.querySelectorAll(".card").length} cards`,
+    },
+    {
+      name: "移动端主内容区占满视口",
+      ok: (() => {
+        const m = document.querySelector("main");
+        if (!m) return false;
+        const b = m.getBoundingClientRect();
+        return b.x <= 1 && b.width >= window.innerWidth - 2;
+      })(),
+      detail: (() => {
+        const m = document.querySelector("main");
+        const b = m?.getBoundingClientRect();
+        return b ? `main x=${Math.round(b.x)} w=${Math.round(b.width)}` : "no main";
+      })(),
+    },
+    {
+      name: "移动端 FAB 固定右下角",
+      ok: (() => {
+        const f = document.querySelector(".mobile-fab");
+        if (!f) return false;
+        const b = f.getBoundingClientRect();
+        return (
+          getComputedStyle(f).position === "fixed" &&
+          Math.abs(b.x - (window.innerWidth - 18 - 56)) <= 2
+        );
+      })(),
+      detail: (() => {
+        const f = document.querySelector(".mobile-fab");
+        if (!f) return "no fab";
+        const b = f.getBoundingClientRect();
+        return `fab pos=${getComputedStyle(f).position} x=${Math.round(b.x)}`;
+      })(),
     },
   ];
 });

@@ -30,9 +30,13 @@ export function TagsPage({ tags, onRename, onDelete }: TagsPageProps) {
       setPendingMerge({ oldName, newName: name });
       return;
     }
-    await onRename(oldName, name);
-    setEditing(null);
-    setDraft("");
+    try {
+      await onRename(oldName, name);
+      setEditing(null);
+      setDraft("");
+    } catch (e) {
+      console.warn("重命名标签失败", e);
+    }
   };
 
   return (
@@ -113,7 +117,7 @@ export function TagsPage({ tags, onRename, onDelete }: TagsPageProps) {
         message="会从所有题目和方法中移除该标签，题目本身不会被删除。"
         onCancel={() => setDeleting(null)}
         onConfirm={() => {
-          if (deleting) void onDelete(deleting);
+          if (deleting) void onDelete(deleting).catch((e) => console.warn("删除标签失败", e));
           setDeleting(null);
         }}
       />
@@ -128,7 +132,10 @@ export function TagsPage({ tags, onRename, onDelete }: TagsPageProps) {
         confirmLabel="合并并重命名"
         onCancel={() => setPendingMerge(null)}
         onConfirm={() => {
-          if (pendingMerge) void onRename(pendingMerge.oldName, pendingMerge.newName);
+          if (pendingMerge)
+            void onRename(pendingMerge.oldName, pendingMerge.newName).catch((e) =>
+              console.warn("合并标签失败", e)
+            );
           setPendingMerge(null);
           setEditing(null);
           setDraft("");

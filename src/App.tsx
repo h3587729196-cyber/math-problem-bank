@@ -1,8 +1,10 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { AnimatePresence, MotionConfig, motion, useReducedMotion } from "motion/react";
 import type { Method, Problem, ProblemDraft, ProblemStatus } from "./types";
 import { freshReview } from "./types";
 import { useStore } from "./hooks/useStore";
+import { ParticleBackground } from "./components/ParticleBackground";
+import { CardGridSkeleton, Skeleton } from "./components/ui/Skeleton";
 import { Sidebar, type Theme, type View } from "./components/Sidebar";
 import { MobileTabBar } from "./components/MobileTabBar";
 import { Library } from "./components/Library";
@@ -64,16 +66,16 @@ function ViewFade({ viewKey, children }: { viewKey: string; children: ReactNode 
         initial={
           reduce
             ? { opacity: 0 }
-            : { opacity: 0, y: 18, scale: 0.996, filter: "blur(8px)" }
+            : { opacity: 0, y: 24, scale: 0.985, rotateX: 3, transformPerspective: 1300, filter: "blur(8px)" }
         }
-        animate={{ opacity: 1, y: 0, scale: 1, filter: "blur(0px)" }}
+        animate={{ opacity: 1, y: 0, scale: 1, rotateX: 0, filter: "blur(0px)" }}
         exit={
           reduce
             ? { opacity: 0 }
-            : { opacity: 0, y: -14, scale: 0.996, filter: "blur(8px)" }
+            : { opacity: 0, y: -16, scale: 0.985, rotateX: -2, transformPerspective: 1300, filter: "blur(8px)" }
         }
         transition={
-          reduce ? { duration: 0 } : { duration: 0.36, ease: [0.22, 1, 0.36, 1] }
+          reduce ? { duration: 0 } : { duration: 0.4, ease: [0.22, 1, 0.36, 1] }
         }
       >
         {children}
@@ -200,6 +202,14 @@ export default function App() {
         if (store.seeded) {
           const blob = await bridgeDownload();
           const data = await backupFileToData(blob as File, () => {});
+          // 桥是空备份（例如其他设备刚清空）：不要用它抹掉本机刚播种的数据，
+          // 而是把本地种子数据作为初始内容推送上去并完成首次同步。
+          if (data.problems.length === 0 && data.methods.length === 0) {
+            const { blob: seededBlob } = await buildBackupBlob(() => {});
+            await bridgeUpload(seededBlob);
+            setBridgeLastSync();
+            return;
+          }
           await store.replaceAll(data.problems, data.methods, () => {});
           applyBackupSettings(data.settings);
           const { blob: merged } = await buildBackupBlob(() => {});
@@ -207,12 +217,15 @@ export default function App() {
           setBridgeLastSync();
           return;
         }
-        if (info.modified && info.modified > getBridgeLastSync()) {
-          if (!IS_DESKTOP_HOST) setBridgeUpdate(true);
-        } else if (localStateTime(store.problems, store.methods) > getBridgeLastSync()) {
+        // 冲突消解：本地数据比桥新 → 上传；桥比本地新 → 仅提示（电脑静默）
+        const localT = localStateTime(store.problems, store.methods);
+        const bridgeT = info.modified ?? 0;
+        if (localT > bridgeT) {
           const { blob } = await buildBackupBlob(() => {});
           await bridgeUpload(blob);
           setBridgeLastSync();
+        } else if (bridgeT > getBridgeLastSync() && !IS_DESKTOP_HOST) {
+          setBridgeUpdate(true);
         }
       } catch {
         // 本地服务不可用时静默跳过
@@ -236,14 +249,18 @@ export default function App() {
       try {
         const binfo = await bridgeInfo();
         if (binfo.exists) {
-          if (binfo.modified && binfo.modified > getBridgeLastSync()) {
-            if (!IS_DESKTOP_HOST) setBridgeUpdate(true);
-          } else if (localStateTime(store.problems, store.methods) > getBridgeLastSync()) {
+          // 刚播种且从未完成首次同步的设备：禁止上传种子数据覆盖桥
+          if (store.seeded && getBridgeLastSync() === 0) return;
+          const localT = localStateTime(store.problems, store.methods);
+          const bridgeT = binfo.modified ?? 0;
+          if (localT > bridgeT) {
             const { blob } = await buildBackupBlob(() => {});
             await bridgeUpload(blob);
             setBridgeLastSync();
+          } else if (bridgeT > getBridgeLastSync() && !IS_DESKTOP_HOST) {
+            setBridgeUpdate(true);
           }
-        } else if (store.problems.length > 0) {
+        } else if (store.problems.length > 0 && !store.seeded) {
           const { blob } = await buildBackupBlob(() => {});
           await bridgeUpload(blob);
           setBridgeLastSync();
@@ -265,6 +282,23 @@ export default function App() {
     else root.dataset.theme = theme;
     localStorage.setItem("mb-theme", theme);
   }, [theme]);
+
+  // 聚光玻璃：把鼠标位置写入 CSS 变量，供玻璃控件的高光跟随光标
+  useEffect(() => {
+    let raf = 0;
+    const onMove = (e: PointerEvent) => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        document.documentElement.style.setProperty("--mx", `${e.clientX}px`);
+        document.documentElement.style.setProperty("--my", `${e.clientY}px`);
+      });
+    };
+    window.addEventListener("pointermove", onMove, { passive: true });
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener("pointermove", onMove);
+    };
+  }, []);
 
   const cycleTheme = useCallback(() => {
     setTheme((t) => THEME_CYCLE[(THEME_CYCLE.indexOf(t) + 1) % THEME_CYCLE.length]);
@@ -505,7 +539,10 @@ export default function App() {
   );
 
   return (
-    <div className="app">
+    <MotionConfig reducedMotion="user">
+      <ParticleBackground />
+      <div className="cursor-light" aria-hidden="true" />
+      <div className="app">
       {demo && (
         <div className="demo-chip" aria-live="polite">
           <i className="demo-chip-dot" />
@@ -598,9 +635,16 @@ export default function App() {
               </button>
             </div>
           ) : (
-            <div className="empty">
-              <h3>正在打开题库…</h3>
-            </div>
+            <>
+              <div className="page-head">
+                <div>
+                  <h1 className="page-title">题库</h1>
+                  <p className="page-sub">正在打开你的本地题库…</p>
+                </div>
+                <Skeleton className="btn-skel" style={{ width: 120, height: 38 }} />
+              </div>
+              <CardGridSkeleton />
+            </>
           )
         ) : (
           <ViewFade viewKey={view}>
@@ -674,6 +718,7 @@ export default function App() {
                 methods={store.methods}
                 onOpenProblem={setSelectedId}
                 onOpenMethod={(id) => setMethodDetailId(id)}
+                onOpenImage={(src, caption) => openLightbox(src, caption)}
                 onUpdateProblem={(id, patch) => void store.updateProblem(id, patch)}
                 onUpdateMethod={(id, patch) => void store.updateMethod(id, patch)}
               />
@@ -681,14 +726,18 @@ export default function App() {
               <HardReviewLibrary
                 problems={store.problems}
                 onOpenProblem={setSelectedId}
+                onOpenImage={(src, caption) => openLightbox(src, caption)}
                 onUpdateProblem={(id, patch) => void store.updateProblem(id, patch)}
               />
             ) : view === "network" ? (
               <Suspense
                 fallback={
-                  <div className="network-loading">
-                    <span className="spinner" aria-hidden="true" />
-                    正在启动招式引擎…
+                  <div className="network-loading" style={{ flexDirection: "column" }}>
+                    <Skeleton
+                      className="network-skel"
+                      style={{ width: 260, height: 200, borderRadius: 20 }}
+                    />
+                    <span>正在启动招式引擎…</span>
                   </div>
                 }
               >
@@ -794,6 +843,7 @@ export default function App() {
           />
         )}
       </AnimatePresence>
-    </div>
+      </div>
+    </MotionConfig>
   );
 }

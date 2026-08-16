@@ -2,8 +2,9 @@ import { useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import type { Problem, ProblemDraft } from "../types";
 import {
-  advanceReview,
+  cognitiveRecord,
   hardInitialReview,
+  perceivedDifficulty,
   predictIntervalDays,
   retrievability,
 } from "../utils/review";
@@ -15,6 +16,7 @@ import { Check, Sparkle } from "./ui/icons";
 interface HardReviewLibraryProps {
   problems: Problem[];
   onOpenProblem: (id: string) => void;
+  onOpenImage: (src: string, caption: string) => void;
   onUpdateProblem: (id: string, patch: Partial<ProblemDraft>) => void;
 }
 
@@ -24,6 +26,7 @@ type Felt = 1 | 2 | 3 | 4 | 5;
 export function HardReviewLibrary({
   problems,
   onOpenProblem,
+  onOpenImage,
   onUpdateProblem,
 }: HardReviewLibraryProps) {
   const reduce = useReducedMotion();
@@ -91,33 +94,35 @@ export function HardReviewLibrary({
     return buckets.filter((g) => g.items.length > 0);
   }, [upcoming, now]);
 
-  /** 记录本次回看觉得的难度并安排下次 */
+  /** 记录本次回看觉得的难度并安排下次（EWMA 感知平滑 + 渐进调档） */
   const record = (p: Problem) => {
     const r = p.hardReview ?? hardInitialReview(now);
+    const prevFelt = p.feltHistory?.length
+      ? p.feltHistory[p.feltHistory.length - 1].difficulty
+      : p.difficulty;
     const history = [...(p.feltHistory ?? []), { at: now, difficulty: felt }];
-    setLastGrade(felt < p.difficulty ? "good" : "again");
+    const res = cognitiveRecord(p.difficulty, felt, r, now, prevFelt);
+    setLastGrade(res.difficulty < p.difficulty ? "good" : "again");
     setSessionDone((c) => c + 1);
-    if (felt < p.difficulty) {
-      // 觉得变简单了：难度降到当前感知值
-      const nextDiff = felt;
-      onUpdateProblem(p.id, {
-        difficulty: nextDiff,
-        feltHistory: history,
-        hardReview:
-          nextDiff >= 4 ? advanceReview(r, "good", now) : undefined,
-      });
-      setFeedback(
-        nextDiff >= 4
-          ? "变简单了 · " + predictIntervalDays(r, "good", now) + " 天后"
-          : "降到「" + FELT_LABEL[felt] + "」 · 已毕业，不再打扰"
-      );
-      return;
-    }
     onUpdateProblem(p.id, {
+      difficulty: res.difficulty,
       feltHistory: history,
-      hardReview: advanceReview(r, "again", now),
+      hardReview: res.review,
     });
-    setFeedback("还是难 · " + predictIntervalDays(r, "again", now) + " 天后再见");
+    const days = res.review
+      ? Math.max(1, Math.ceil((res.review.nextReviewAt - now) / DAY))
+      : 0;
+    if (res.difficulty < p.difficulty) {
+      setFeedback(
+        res.difficulty < 4
+          ? "难度 " + p.difficulty + " → " + res.difficulty + " · 已毕业，不再打扰"
+          : "难度 " + p.difficulty + " → " + res.difficulty + " · " + days + " 天后"
+      );
+    } else if (res.difficulty > p.difficulty) {
+      setFeedback("难度 " + p.difficulty + " → " + res.difficulty + " · 变难了 · " + days + " 天后");
+    } else {
+      setFeedback("还是难 · " + days + " 天后再见");
+    }
   };
 
   const nextSummary = useMemo(() => {
@@ -183,6 +188,7 @@ export function HardReviewLibrary({
                         felt={felt}
                         onFelt={setFelt}
                         onOpen={() => onOpenProblem(current.id)}
+                        onOpenImage={onOpenImage}
                         onRecord={() => record(current)}
                       />
                     </motion.div>
@@ -262,6 +268,7 @@ function HardCard({
   felt,
   onFelt,
   onOpen,
+  onOpenImage,
   onRecord,
 }: {
   p: Problem;
@@ -269,6 +276,7 @@ function HardCard({
   felt: Felt;
   onFelt: (f: Felt) => void;
   onOpen: () => void;
+  onOpenImage: (src: string, caption: string) => void;
   onRecord: () => void;
 }) {
   const imgUrl = useBlobUrl(p.images.find((i) => i.kind === "problem")?.blob);
@@ -278,6 +286,7 @@ function HardCard({
   const history = p.feltHistory ?? [];
   const lastFelt = history.length ? history[history.length - 1].difficulty : p.difficulty;
   const trend = felt - p.difficulty;
+  const predicted = perceivedDifficulty(p.difficulty, felt);
   const againDays = r ? predictIntervalDays(r, "again", now) : 1;
   const goodDays = r ? predictIntervalDays(r, "good", now) : 2;
   const overdue =
@@ -290,7 +299,18 @@ function HardCard({
         onClick={onOpen}
         aria-label={"打开题目：" + (p.title || "")}
       >
-        {imgUrl && <img className="review-card-img" src={imgUrl} alt="题干" />}
+        {imgUrl && (
+          <img
+            className="review-card-img"
+            src={imgUrl}
+            alt="题干"
+            onClick={(e) => {
+              e.stopPropagation();
+              e.preventDefault();
+              onOpenImage(imgUrl, p.title || "题干");
+            }}
+          />
+        )}
         <div className="review-card-body">
           <div className="review-card-top">
             <span className="badge stuck">难度 {p.difficulty}</span>
@@ -347,8 +367,8 @@ function HardCard({
             {trend < 0 ? "记录 · 变简单了" : trend > 0 ? "记录 · 变难了" : "记录 · 和上次一样"}
           </b>
           <span>
-            {felt < p.difficulty
-              ? felt < 4
+            {predicted < p.difficulty
+              ? predicted < 4
                 ? "毕业 · 不再打扰"
                 : goodDays + " 天后"
               : againDays + " 天后"}

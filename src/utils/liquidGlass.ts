@@ -1,20 +1,25 @@
 /* ============================================================
- * 液态玻璃 · 透镜折射核心
+ * 液态玻璃 · 透镜折射核心（分层版）
  *
  * 原理（源自 Apple Liquid Glass 的公开逆向工程，shuding/childrentime）：
  * 玻璃不是「画上去的高光」，而是对背景像素的真实折射——
  * 1. 用圆角矩形 SDF 描述玻璃形状
  * 2. smoothStep 计算每个像素的位移：边缘像素被「拉向中心」，
- *    中心几乎不动，形成放大镜般的聚焦与边缘弯曲
+ *    中心保持 6% 基础放大（透镜感），边缘带位移最强（水珠弯曲）
  * 3. 把位移向量编码进 R（水平）/G（垂直）通道，生成位移图
  * 4. SVG feDisplacementMap 按位移图真实移动背景像素
  * 5. backdrop-filter: url(#lq-lens) blur() contrast() brightness() saturate()
  *
+ * 分层（减负担 · 重点突破）：
+ * - lq-lens        强折射（scale 0.05）→ 只给「主角」：导航坞、弹层、对话框、
+ *                  移动端底栏、剧场头、搜索悬浮层——玻璃感最重的地方
+ * - lq-lens-subtle 微折射（scale 0.02）→ 悬浮小控件（如悬浮按钮）
+ * - 其余行内控件直接用纯 blur（零折射开销），视觉几乎无差但 GPU 负担大减
+ *
  * 本模块在运行时生成位移图并注入 SVG 滤镜，全应用共用。
  * ========================================================== */
 
-const FILTER_ID = "lq-lens";
-const MAP_SIZE = 256;
+const MAP_SIZE = 384;
 
 function smoothStep(a: number, b: number, t: number): number {
   const x = Math.max(0, Math.min(1, (t - a) / (b - a)));
@@ -42,7 +47,7 @@ function roundedRectSDF(
   );
 }
 
-function buildMap(): { dataUrl: string; maxScale: number } {
+function buildMap(): string {
   const canvas = document.createElement("canvas");
   canvas.width = MAP_SIZE;
   canvas.height = MAP_SIZE;
@@ -50,7 +55,7 @@ function buildMap(): { dataUrl: string; maxScale: number } {
   const img = ctx.createImageData(MAP_SIZE, MAP_SIZE);
   const data = img.data;
 
-  // 第一遍：计算每个像素的位移（拉向中心）
+  // 第一遍：计算每个像素的位移（拉向中心，中心带基础放大）
   const dxs = new Float32Array(MAP_SIZE * MAP_SIZE);
   const dys = new Float32Array(MAP_SIZE * MAP_SIZE);
   let maxScale = 0;
@@ -60,9 +65,9 @@ function buildMap(): { dataUrl: string; maxScale: number } {
       const uy = y / MAP_SIZE - 0.5;
       // 玻璃边界（单位空间）：圆角矩形，边缘略内收
       const sdf = roundedRectSDF(ux, uy, 0.46, 0.46, 0.24);
-      // 位移强度：边缘带最强，中心与远处为 0
+      // 位移强度：边缘带最强，远处为 0；中心保留 6% 基础放大（透镜感）
       const displacement = smoothStep(0.55, 0.02, sdf - 0.06);
-      const scaled = smoothStep(0, 1, displacement);
+      const scaled = 0.06 + 0.94 * smoothStep(0, 1, displacement);
       // 新采样位置 = uv * scaled + (1-scaled) * 0.5 → 边缘像素采样自更靠近中心的内容
       const dx = (ux * scaled + (1 - scaled) * 0.5) * MAP_SIZE - x;
       const dy = (uy * scaled + (1 - scaled) * 0.5) * MAP_SIZE - y;
@@ -81,26 +86,17 @@ function buildMap(): { dataUrl: string; maxScale: number } {
     data[i * 4 + 3] = 255;
   }
   ctx.putImageData(img, 0, 0);
-  return { dataUrl: canvas.toDataURL(), maxScale };
+  return canvas.toDataURL();
 }
 
-/** 安装全局透镜滤镜（幂等），返回滤镜 URL */
-export function installLiquidLens(): string {
-  if (document.getElementById(FILTER_ID)) return "url(#" + FILTER_ID + ")";
-
-  const { dataUrl } = buildMap();
-  // 位移强度（bbox 单位）：channel = dx/maxScale + 0.5，
-  // feDisplacementMap 位移 = (channel-0.5) × 2 × scale（元素尺寸比例），
-  // 边缘最大拉移 ≈ 2 × scale；0.03 → 6%，轻微透镜感、无可见错位
-  const scale = 0.03;
-
+function installFilter(id: string, dataUrl: string, scale: number): void {
   const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
   svg.setAttribute("width", "0");
   svg.setAttribute("height", "0");
   svg.setAttribute("style", "position:absolute;width:0;height:0");
   const defs = document.createElementNS("http://www.w3.org/2000/svg", "defs");
   const filter = document.createElementNS("http://www.w3.org/2000/svg", "filter");
-  filter.setAttribute("id", FILTER_ID);
+  filter.setAttribute("id", id);
   filter.setAttribute("x", "-20%");
   filter.setAttribute("y", "-20%");
   filter.setAttribute("width", "140%");
@@ -110,7 +106,6 @@ export function installLiquidLens(): string {
   filter.setAttribute("primitiveUnits", "objectBoundingBox");
 
   const feImage = document.createElementNS("http://www.w3.org/2000/svg", "feImage");
-  feImage.setAttribute("id", FILTER_ID + "-map");
   feImage.setAttribute("href", dataUrl);
   feImage.setAttribute("preserveAspectRatio", "none");
   feImage.setAttribute("x", "0");
@@ -131,6 +126,14 @@ export function installLiquidLens(): string {
   defs.appendChild(filter);
   svg.appendChild(defs);
   document.body.appendChild(svg);
+}
 
-  return "url(#" + FILTER_ID + ")";
+/** 安装全局透镜滤镜（幂等） */
+export function installLiquidLens(): void {
+  if (document.getElementById("lq-lens")) return;
+  const dataUrl = buildMap();
+  // 主角：边缘最大拉移 ≈ 2×0.05 = 10%（明显水珠弯曲）
+  installFilter("lq-lens", dataUrl, 0.05);
+  // 配角：≈ 4%（轻微透镜，低负担）
+  installFilter("lq-lens-subtle", dataUrl, 0.02);
 }

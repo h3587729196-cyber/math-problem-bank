@@ -74,12 +74,14 @@ export interface ProblemSolution {
 }
 
 /**
- * 回看排期（FSRS-Lite 记忆模型）：
+ * 回看排期（FSRS-4.5 风格记忆模型）：
  * - 稳定性 s：记忆保持率降到 90% 所需的天数（= 目标保持率下的复习间隔）
  * - 难度 d：条目本身多难记（1–10）
  * - lapse：连续失败次数；streak：连续做对次数
  * - lastAt：上次复习时间（用于计算当前记忆强度）
- * 遗忘曲线：R(t) = (1 + t/(9·s))^(-1)，t = s 时恰好 R = 90%。
+ * 遗忘曲线：R(t) = (1 + (19/81)·t/s)^(-0.5)，t = s 时恰好 R = 90%。
+ * 评级：again 稳定性塌缩并加深难度（R 越高惩罚越重）；hard 微降稳定性；
+ * good 按「难度缓解 × 临界点复习增益 × 连击加成」增长间隔。
  */
 export interface ReviewInfo {
   stuckAt: number;

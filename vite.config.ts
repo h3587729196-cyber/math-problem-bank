@@ -22,6 +22,8 @@ export default defineConfig({
   ],
   server: {
     port: 5173,
+    // 监听所有网卡：手机通过局域网 IP 访问并与电脑同步（否则 dev 模式只绑定 localhost）
+    host: true,
     open: false,
   },
   build: {

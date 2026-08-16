@@ -21,6 +21,7 @@ interface ReviewLibraryProps {
   methods: Method[];
   onOpenProblem: (id: string) => void;
   onOpenMethod: (id: string) => void;
+  onOpenImage: (src: string, caption: string) => void;
   onUpdateProblem: (id: string, patch: Partial<ProblemDraft>) => void;
   onUpdateMethod: (id: string, patch: Partial<Method>) => void;
 }
@@ -35,6 +36,7 @@ export function ReviewLibrary({
   methods,
   onOpenProblem,
   onOpenMethod,
+  onOpenImage,
   onUpdateProblem,
   onUpdateMethod,
 }: ReviewLibraryProps) {
@@ -314,6 +316,7 @@ export function ReviewLibrary({
                               remaining={remaining}
                               onReveal={reveal}
                               onOpen={() => onOpenProblem((current as Problem).id)}
+                              onOpenImage={onOpenImage}
                               onGrade={(g) => gradeProblem(current as Problem, g)}
                             />
                           </motion.div>
@@ -381,7 +384,7 @@ export function ReviewLibrary({
                                 </span>
                                 <span className="review-upcoming-strength">
                                   <i className="dot-on" />
-                                  90%
+                                  {Math.round((r ? retrievability(r, now) : 1) * 100)}%
                                 </span>
                                 <span className="muted">{days} 天后回看</span>
                               </button>
@@ -512,7 +515,7 @@ export function ReviewLibrary({
                               </span>
                               <span className="review-upcoming-strength">
                                 <i className="dot-on" />
-                                90%
+                                {Math.round((r ? retrievability(r, now) : 1) * 100)}%
                               </span>
                               <span className="muted">{days} 天后回看</span>
                             </button>
@@ -572,6 +575,7 @@ function ProblemCard({
   remaining,
   onReveal,
   onOpen,
+  onOpenImage,
   onGrade,
 }: {
   p: Problem;
@@ -580,6 +584,7 @@ function ProblemCard({
   remaining: number;
   onReveal: () => void;
   onOpen: () => void;
+  onOpenImage: (src: string, caption: string) => void;
   onGrade: (g: ReviewGrade) => void;
 }) {
   const imgUrl = useBlobUrl(p.images.find((i) => i.kind === "problem")?.blob);
@@ -601,7 +606,18 @@ function ProblemCard({
         onClick={onOpen}
         aria-label={"打开题目：" + (p.title || "")}
       >
-        {imgUrl && <img className="review-card-img" src={imgUrl} alt="题干" />}
+        {imgUrl && (
+          <img
+            className="review-card-img"
+            src={imgUrl}
+            alt="题干"
+            onClick={(e) => {
+              e.stopPropagation();
+              e.preventDefault();
+              onOpenImage(imgUrl, p.title || "题干");
+            }}
+          />
+        )}
         <div className="review-card-body">
           <div className="review-card-top">
             <span className="badge stuck">{STATUS_LABEL.stuck}</span>
