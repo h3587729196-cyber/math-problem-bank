@@ -46,17 +46,14 @@ Your phone and computer on the same Wi-Fi stay in sync automatically: data lives
 ### Backup & restore
 Local auto-backup (keep the latest N copies), full ZIP export/import (original images + page settings), legacy JSON backup import, and one-click wipe.
 
-## Design language (Liquid Glass)
+## Dynamic particle background
 
-- **Liquid glass**: glass controls float like a water droplet — top highlight (droplet reflection), bottom caustics, Fresnel rim light, contact shadow; SDF displacement + `feDisplacementMap` produce natural refraction, falling back to plain blur where `url()` is unsupported;
-- **Motion**: blur + parallax spring transitions, sliding capsules, card hover lift, button sheen, staggered grid entrances, spring-out review cards, ring-drawn completion; everything degrades with the system "reduce motion" setting;
-- **Color**: brand gradient (blue → indigo → violet), iOS-native status colors, strictly consistent light/dark themes, auto-theming particle background.
+An interactive, physics-driven particle field rendered on a canvas behind the whole app:
 
-## Screenshots
-
-| Main UI (dark theme) | Analytics report (dark theme) |
-| --- | --- |
-| ![Main UI](shot-final-dark.png) | ![Analytics report](shot-perf-dark.png) |
+- **Elastic particle field** — ~4,500 monochrome particles laid out on a honeycomb grid, each anchored to a home position; at rest they sit still with a faint collective breathing shimmer (batched `Path2D` rendering keeps 4,500+ particles smooth);
+- **Triple pointer motion** — moving the cursor triggers three layered effects: a Gaussian force field washes nearby particles aside (wake drag + frontal repulsion + vortex swirl); fast movement spawns expanding circular ripples that push particles outward in waves; and the cursor jets a stream of sand grains that drift and fade along the wake;
+- **Snap-back springs** — when the pointer leaves, every particle is pulled back to its anchor with a lively spring bounce;
+- **Adaptive & accessible** — dark theme renders pale glowing dots (`lighter` compositing), light theme renders dark-grey dust; particle density scales with the viewport, rendering pauses while the tab is hidden, and `prefers-reduced-motion` falls back to a static frame.
 
 ## Tech stack
 
